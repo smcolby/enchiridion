@@ -290,7 +290,8 @@ def build_router(rules: list[tuple[Path, dict, str]]) -> str:
         "name": "rules",
         "description": (
             "Scoped coding rules catalog. Consult before creating or modifying "
-            "source files; the index maps file patterns to rules. Covers: "
+            "any file, in any directory; the index maps file patterns to rules. "
+            "Covers: "
             f"{names}."
         ),
     }
