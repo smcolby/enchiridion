@@ -1,6 +1,6 @@
 # Agentic Infrastructure — Content Pattern
 
-This document describes a harness-agnostic pattern for the *content* of agentic infrastructure: the instructions, rules, skills, personas, and templates that make AI coding assistants reliably good at software development across the full lifecycle. Coding, documentation, adversarial review, and testing are the first instantiated areas (with Python as the first instantiated language), but the architecture is built to absorb any development activity; the [coverage test](#coverage-test) below states the claim precisely.
+This document describes a harness-agnostic pattern for the *content* of agentic infrastructure: the instructions, rules, skills, personas, and templates that make AI coding assistants reliably good at software development across the full lifecycle. The [coverage test](#coverage-test) below states the claim precisely; the [Python instantiation](#python-instantiation) shows a concrete worked example across coding, documentation, adversarial review, and testing.
 
 It is written in the spirit of Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): principles first, named operations, deliberately abstract about implementation. Share it with an LLM and instantiate a version that fits your setup.
 
@@ -22,7 +22,7 @@ The pattern's vocabulary, in one place. Each term is developed fully in its own 
 | **Harness** | An AI coding assistant runtime (Claude Code, Copilot CLI, pi, Cursor). Each reads its own config formats; the pattern treats them as render targets |
 | **Catalog** | The full set of canonical content this pattern manages: doctrine, rules, playbooks, personas, and seeds, stored harness-agnostically in one repo |
 | **Doctrine** | Universal always-on instructions (style, guardrails, conventions). The most expensive tier, so the smallest: it carries a hard token ceiling |
-| **Rule** | A scoped, conditional instruction file keyed to a language, stack, file pattern, or task. Activated when relevant rather than always. The new layer this pattern introduces |
+| **Rule** | A scoped, conditional instruction file keyed to a language, stack, file pattern, or task. Activated when relevant rather than always |
 | **Playbook** | A multi-step procedure delivered as a skill (e.g. adversarial review, test authoring). Loaded on demand, never resident |
 | **Persona** | A stance and authority for delegated work (the critic, the tester). Carries no procedure and no domain constraints; those live in playbooks and rules |
 | **Seed** | A repository instantiation template: starter `AGENTS.md`, rule selection, and tool configs for a project archetype, applied once at repo creation |
@@ -90,7 +90,7 @@ The layers claim to cover software development writ large, and the claim is chec
 | CI/CD and infra-as-code | Stack rules (the pipeline DSL is a stack) + scoped activation on workflow files |
 | Database / data migrations | Stack rule + migration playbook; anti-hallucination entries for the ORM's deprecated APIs |
 
-A first catalog (see [Python instantiation](#python-instantiation)) will typically cover coding, documentation, review, and testing before anything else; the rows above enter the catalog through the same operations as everything else, as need arises.
+The rows above are representative, not exhaustive; any activity enters the catalog through the same operations (`ingest`, `capture`) as any other content.
 
 The layers compose. A persona supplies the stance ("you are an adversarial reviewer; find problems, do not praise"), a playbook supplies the procedure (review passes, severity rubric, output format), and rules supply the domain constraints the reviewer checks against (the Python testing rule defines what a healthy test looks like; the critic enforces it). Keeping stance, procedure, and domain knowledge in separate artifacts means each is reusable: the same critic persona runs a security review with a different playbook, and the same testing rule serves both the author writing tests and the critic judging them.
 
@@ -124,7 +124,7 @@ Two Claude Code caveats shape the rendering. First, its rules have no descriptio
 
 ## Rule architecture
 
-Rules are the new layer, so they get the full treatment.
+Rules are the pattern's conditional activation layer; this section covers their full architecture.
 
 ### Canonical schema
 
@@ -272,7 +272,7 @@ The migration is a per-directive triage, called hardening:
 
 Hardening is never a standing process; it runs at the moments content enters or gets reviewed:
 
-- **Adoption sweep**: one pass over the existing catalog (and doctrine) when the pattern is first implemented.
+- **Adoption sweep**: a one-time pass over the full catalog and doctrine to migrate any checkable directives into gates.
 - **`ingest` and `capture`**: new content is triaged on the way in, so soft directives that could have been gates never accumulate.
 - **`audit`**: re-triage, because enforceability is a moving target; linters ship new rule families constantly, so a judgment-only directive from last year may have a rule code today.
 
@@ -286,7 +286,7 @@ One caveat, stated plainly: gates act post-generation. The linter does not stop 
 
 ## Python instantiation
 
-The pattern is general; this is the *first* concrete catalog it produces, covering the initial priority areas (coding, documentation, adversarial review, testing) for the first language. It is a worked example of instantiation, never the extent of coverage: further languages, stacks, and lifecycle activities (see the coverage test) enter through `ingest` and `capture` as need arises. Each row is one artifact in the appropriate layer.
+The pattern is general; this section shows a concrete instantiation covering coding, documentation, adversarial review, and testing in Python. It is a worked example, not the extent of coverage: additional languages, stacks, and lifecycle activities enter the catalog through `ingest` and `capture`. Each row is one artifact in the appropriate layer.
 
 ### Doctrine
 
