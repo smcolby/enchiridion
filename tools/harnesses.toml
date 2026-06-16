@@ -44,7 +44,6 @@ skill_dir = "~/.pi/agent/skills"
 symlinks = [
     ["harnesses/pi/AGENTS.md", "~/.pi/agent/AGENTS.md"],
     ["harnesses/pi/models.json", "~/.pi/agent/models.json"],
-    ["harnesses/pi/mcp.json", "~/.pi/agent/mcp.json"],
 ]
 generated = [
     ["harnesses/pi/settings.json", "~/.pi/agent/settings.json"],
@@ -84,7 +83,6 @@ instruction_live = "~/.github/copilot-instructions.md"
 skill_dir = "~/.copilot/skills"
 symlinks = [
     ["harnesses/copilot/copilot-instructions.md", "~/.github/copilot-instructions.md"],
-    ["harnesses/copilot/mcp-config.json", "~/.copilot/mcp-config.json"],
     ["harnesses/copilot/agents", "~/.copilot/agents"],
 ]
 generated = []

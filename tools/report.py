@@ -10,7 +10,6 @@ Usage:
 """
 
 import difflib
-import json
 import re
 import sys
 import tomllib
@@ -23,21 +22,13 @@ from rich.table import Table
 # share drift collectors and the registry with sibling tools (tools/ on sys.path)
 sys.path.insert(0, str(Path(__file__).parent))
 import registry  # noqa: E402
-import wire_extensions  # noqa: E402
 
 REPO = registry.REPO
 HOME = registry.HOME
-EXTENSIONS_DIR = wire_extensions.EXTENSIONS_DIR
 BLOCKS_DIR = REPO / "shared/blocks"
 AGENTS_DIR = REPO / "shared/agents"
 MODELS_DIR = REPO / "shared/models"
 HARNESSES_DIR = REPO / "harnesses"
-LLM_WIKI_SRC = HOME / "repos/llm-wiki"
-LLM_WIKI_LINK = HOME / ".claude/skills/llm-wiki"
-
-# Skill-dir entries that are external plugin links, not shared skills; they are
-# verified under "external sources" in HARNESS WIRING instead
-EXTERNAL_PLUGIN_LINKS = {"llm-wiki"}
 
 # Per-harness wiring topology, built from tools/harnesses.toml (see registry.py)
 HARNESS_WIRING: dict[str, dict] = {
@@ -107,135 +98,6 @@ def _section(title: str):
 
 def _harness_row(harness: str, content: str):
     console.print(f"    [dim]{harness:<14}[/dim]  {content}")
-
-
-# ── extensions ────────────────────────────────────────────────────────────────
-
-
-def load_extensions() -> list[dict]:
-    """Load every extension manifest as a list of dicts."""
-    if not EXTENSIONS_DIR.exists():
-        return []
-    result = []
-    for p in sorted(EXTENSIONS_DIR.glob("*.toml")):
-        with p.open("rb") as f:
-            result.append(tomllib.load(f))
-    return result
-
-
-def _load_json(path: Path) -> dict:
-    try:
-        return json.loads(path.read_text())
-    except Exception:
-        return {}
-
-
-def _ext_check_pi_package(pkg: str) -> tuple[bool, str]:
-    packages = _load_json(HARNESSES_DIR / "pi/settings.json").get("packages", [])
-    return (
-        (True, f"package: {pkg}")
-        if any(pkg in p for p in packages)
-        else (False, f"'{pkg}' not in packages in harnesses/pi/settings.json")
-    )
-
-
-def _ext_check_hook(cmd: str) -> tuple[bool, str]:
-    hooks = _load_json(HARNESSES_DIR / "claude-code/settings.json").get("hooks", {})
-    for entry in hooks.get("PreToolUse", []):
-        for h in entry.get("hooks", []):
-            if cmd in h.get("command", ""):
-                return True, f"hook: {h['command']}"
-    return False, f"no PreToolUse hook containing '{cmd}'"
-
-
-def _ext_check_dir(path_str: str) -> tuple[bool, str]:
-    path = Path(path_str.replace("~", str(HOME)))
-    return (
-        (True, f"plugin dir: {short(path)}")
-        if path.is_dir()
-        else (False, f"dir not found: {short(path)}")
-    )
-
-
-def _ext_check_mcp(config_str: str, server_key: str) -> tuple[bool, str]:
-    config = Path(config_str.replace("~", str(HOME)))
-    if not config.exists():
-        return False, f"{short(config)}: file not found"
-    servers = _load_json(config).get("mcpServers", {})
-    return (
-        (True, f"registered in {short(config)}")
-        if any(server_key in k for k in servers)
-        else (False, f"'{server_key}' not in mcpServers in {short(config)}")
-    )
-
-
-def _tool_cell(ext: dict, harness: str) -> tuple[str, list[str]]:
-    """Return (cell_text, failure_messages) for one tool × harness cell.
-
-    Cell vocabulary comes from `mechanisms = [...]` in the harness block.
-    Verify checks (verify_hook / verify_dir / verify_mcp / verify_pi_package)
-    and declared symlinks are run; failures move to the SUMMARY.
-    """
-    hconf = ext.get("harnesses", {}).get(harness)
-    if hconf is None:
-        return "[dim]—[/dim]", []
-
-    mechanisms = hconf.get("mechanisms", [])
-    label = " + ".join(mechanisms) if mechanisms else "?"
-    failures: list[str] = []
-
-    for pair in hconf.get("symlinks", []):
-        src = REPO / pair[0]
-        dst = Path(pair[1].replace("~", str(HOME)))
-        ok, msg = check_symlink(src, dst)
-        if not ok:
-            failures.append(f"symlink {short(dst)}: {msg}")
-    if "verify_pi_package" in hconf:
-        ok, msg = _ext_check_pi_package(hconf["verify_pi_package"])
-        if not ok:
-            failures.append(msg)
-    if "verify_hook" in hconf:
-        ok, msg = _ext_check_hook(hconf["verify_hook"])
-        if not ok:
-            failures.append(msg)
-    if "verify_dir" in hconf:
-        ok, msg = _ext_check_dir(hconf["verify_dir"])
-        if not ok:
-            failures.append(msg)
-    if "verify_mcp" in hconf:
-        ok, msg = _ext_check_mcp(hconf["verify_mcp"], ext.get("block", ext["name"]))
-        if not ok:
-            failures.append(msg)
-
-    glyph = "[red]✗[/red]" if failures else "[green]✓[/green]"
-    return f"{glyph} {label}", failures
-
-
-def inspect_tools(errors: list, warnings: list):
-    """Single TOOLS table: tools as rows, harnesses as columns, mechanism per cell."""
-    _section("TOOLS  (per-harness integration mechanism)")
-
-    extensions = load_extensions()
-    if not extensions:
-        console.print("\n  [dim]no tools defined[/dim]")
-        return
-
-    harnesses = list(HARNESS_WIRING.keys())
-    table = Table(box=box.SIMPLE_HEAD, padding=(0, 2), pad_edge=False, show_edge=False)
-    table.add_column("tool", style="cyan")
-    for h in harnesses:
-        table.add_column(h, justify="center")
-
-    for ext in sorted(extensions, key=lambda e: e["name"].lower()):
-        row = [ext["name"]]
-        for h in harnesses:
-            cell, failures = _tool_cell(ext, h)
-            row.append(cell)
-            for msg in failures:
-                errors.append(f"tool '{ext['name']}' ({h}): {msg}")
-        table.add_row(*row)
-
-    console.print(table)
 
 
 # ── blocks ────────────────────────────────────────────────────────────────────
@@ -376,7 +238,7 @@ def inspect_skills(errors: list, warnings: list):
     for harness, skill_dir in skill_dirs.items():
         if skill_dir.exists():
             for item in sorted(skill_dir.iterdir()):
-                if item.name.startswith(".") or item.name in EXTERNAL_PLUGIN_LINKS:
+                if item.name.startswith("."):
                     continue
                 skills.setdefault(item.name, {})[harness] = item
 
@@ -505,21 +367,6 @@ def inspect_harness_wiring(errors: list, warnings: list):
                 console.print(f"    {_s_err(f'{short(dst)}: not found — run bootstrap.py')}")
                 errors.append(f"generated file {short(dst)}: not found")
 
-    # external-source symlinks (sources live outside this repo)
-    console.print("\n  [bold]external sources[/bold]")
-    if LLM_WIKI_SRC.exists():
-        ok_flag, msg = check_symlink(LLM_WIKI_SRC, LLM_WIKI_LINK)
-        if ok_flag:
-            console.print(f"    {_s_ok(short(LLM_WIKI_LINK), f'→ {short(LLM_WIKI_SRC)}')}")
-        else:
-            console.print(f"    {_s_err(f'{short(LLM_WIKI_LINK)}: {msg}')}")
-            errors.append(f"symlink {short(LLM_WIKI_LINK)}: {msg}")
-    else:
-        console.print(
-            f"    [dim]—  {short(LLM_WIKI_LINK)}: source {short(LLM_WIKI_SRC)} "
-            f"not cloned on this machine[/dim]"
-        )
-
 
 # ── generated-file drift ──────────────────────────────────────────────────────
 
@@ -592,43 +439,6 @@ def inspect_generated_drift(warnings: list):
         console.print("\n  [green]✓  no drift between live files and rendered templates[/green]")
 
 
-# ── manifest-derived files ────────────────────────────────────────────────────
-
-
-def inspect_manifest_drift(errors: list, warnings: list):
-    """Report drift between extension manifests and the files they render to."""
-    _section("MANIFEST-DERIVED FILES  (manifest → repo)")
-
-    entries = wire_extensions.collect_hooks_drift() + wire_extensions.collect_mcp_drift()
-    if not entries:
-        console.print("\n  [dim]no manifest-derived files[/dim]")
-        return
-
-    by_source: dict[Path, list[wire_extensions.DriftEntry]] = {}
-    for e in entries:
-        by_source.setdefault(e.source, []).append(e)
-
-    any_issue = False
-    for source in sorted(by_source, key=lambda p: str(p)):
-        console.print(f"\n  [bold cyan]{short(source)}[/bold cyan]")
-        for e in by_source[source]:
-            if e.status == "ok":
-                console.print(f"    {_s_ok(short(e.path))}")
-            elif e.status == "drift":
-                any_issue = True
-                console.print(f"    {_s_warn(short(e.path), 'drift — manifest and file differ')}")
-                warnings.append(
-                    f"manifest drift: {short(e.path)} out of sync with {short(e.source)}"
-                )
-            else:  # missing
-                any_issue = True
-                console.print(f"    {_s_err(f'{short(e.path)}: missing')}")
-                errors.append(f"manifest-derived file missing: {short(e.path)}")
-
-    if any_issue:
-        console.print("\n    [dim]Resolve: python tools/wire_extensions.py[/dim]")
-
-
 # ── main ──────────────────────────────────────────────────────────────────────
 
 
@@ -643,13 +453,11 @@ def main():
         style="bright_blue",
     )
 
-    inspect_tools(errors, warnings)
     inspect_blocks(errors, warnings)
     inspect_agents(errors, warnings)
     inspect_rules(errors, warnings)
     inspect_skills(errors, warnings)
     inspect_models(errors, warnings)
-    inspect_manifest_drift(errors, warnings)
     inspect_harness_wiring(errors, warnings)
     inspect_generated_drift(warnings)
 

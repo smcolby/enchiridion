@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """verify.py — assert cross-harness congruence. Exits non-zero on drift.
 
-Checks blocks + agent bodies + manifest-derived files by default.
+Checks blocks + agent bodies by default.
 
 Usage:
   python tools/verify.py                  # check all harnesses
@@ -22,7 +22,6 @@ import registry  # noqa: E402
 
 REPO = Path(__file__).parent.parent
 SYNC = REPO / "tools/sync.py"
-WIRE = REPO / "tools/wire_extensions.py"
 
 
 def check_doctrine_budget() -> int:
@@ -44,7 +43,7 @@ def check_doctrine_budget() -> int:
 
 
 def main():
-    """Run sync and extension checks plus the doctrine budget; exit non-zero on drift."""
+    """Run sync check plus the doctrine budget; exit non-zero on drift."""
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -58,9 +57,8 @@ def main():
     cmd += ["--agents"] if args.agents else ["--all"]
 
     result_sync = subprocess.run(cmd)
-    result_wire = subprocess.run([sys.executable, str(WIRE), "--check"])
     budget = check_doctrine_budget()
-    sys.exit(result_sync.returncode | result_wire.returncode | budget)
+    sys.exit(result_sync.returncode | budget)
 
 
 if __name__ == "__main__":

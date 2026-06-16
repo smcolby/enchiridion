@@ -2,9 +2,9 @@
 """bootstrap.py — wire all enchiridion symlinks and generated files.
 
 Reads the harness registry (tools/harnesses.toml) and wires every installed
-harness: instruction files, configs, agents, skills, and extensions. Safe to
-re-run: correct symlinks are skipped, broken ones replaced, generated files
-rewritten only when their rendered content changes.
+harness: instruction files, configs, agents, and skills. Safe to re-run:
+correct symlinks are skipped, broken ones replaced, generated files rewritten
+only when their rendered content changes.
 
 Usage:
   python tools/bootstrap.py                   # wire everything
@@ -16,7 +16,6 @@ Usage:
 import argparse
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -25,7 +24,6 @@ import registry  # noqa: E402
 from registry import HOME, REPO, expand, render_template  # noqa: E402
 
 LLM_WIKI = HOME / "repos/llm-wiki"
-WIRE_EXTENSIONS = REPO / "tools/wire_extensions.py"
 
 
 # ── primitives ────────────────────────────────────────────────────────────────
@@ -116,7 +114,7 @@ def wire_skill(skill: str) -> None:
 
 
 def wire_external() -> None:
-    """Link sources that live outside this repo (plugins, external skill repos)."""
+    """Link sources that live outside this repo (external skill repos)."""
     print("Wiring external sources...")
     claude_dir = HOME / ".claude"
     if not claude_dir.is_dir():
@@ -126,20 +124,6 @@ def wire_external() -> None:
         link(LLM_WIKI, claude_dir / "skills/llm-wiki")
     else:
         print(f"  SKIP llm-wiki — {LLM_WIKI} not cloned")
-    cm = shutil.which("context-mode")
-    if cm:
-        plugin = Path(cm).resolve().parent / ".claude-plugin"
-        if plugin.is_dir():
-            # ~/.claude/context-mode is the tool's data directory (content/*.db
-            # knowledge bases, sessions/); only the inner .claude-plugin manifest
-            # links to the npm package, so package upgrades never touch user data
-            data_dir = claude_dir / "context-mode"
-            if data_dir.is_symlink():
-                data_dir.unlink()
-            data_dir.mkdir(exist_ok=True)
-            link(plugin, data_dir / ".claude-plugin")
-    else:
-        print("  SKIP context-mode — not installed (npm install -g context-mode)")
 
 
 def wire_only(target: str) -> None:
@@ -178,9 +162,6 @@ def remove_harness(name: str) -> None:
             unlink_if_symlink(expand(conf["skill_dir"]) / skill)
     if name == "claude-code":
         unlink_if_symlink(HOME / ".claude/skills/llm-wiki")
-        unlink_if_symlink(HOME / ".claude/context-mode/.claude-plugin")
-        unlink_if_symlink(HOME / ".claude/context-mode")  # legacy whole-dir wiring
-    subprocess.run([sys.executable, str(WIRE_EXTENSIONS), "--remove", name], check=True)
 
     archive_dir = REPO / "harnesses/_deprecated"
     archive_dir.mkdir(exist_ok=True)
@@ -193,7 +174,7 @@ def remove_harness(name: str) -> None:
 
 
 def main() -> None:
-    """Wire all harnesses, skills, and extensions, or remove one harness."""
+    """Wire all harnesses and skills, or remove one harness."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", metavar="PATH", help="re-wire a single live file")
     parser.add_argument("--skill", metavar="NAME", help="wire one skill into all harnesses")
@@ -224,14 +205,9 @@ def main() -> None:
     wire_external()
     print()
 
-    print("Wiring extensions...")
-    subprocess.run([sys.executable, str(WIRE_EXTENSIONS)], check=True)
-    print()
-
     print("=== Manual steps required ===")
     print("  1. Edit shared/models/ollama.json — update Ollama baseUrl to this machine's address")
     print("  2. Create ~/.pi/agent/auth.json with API keys (never committed)")
-    print("  (Extension-specific one-time setup printed above)")
     if not os.environ.get("OLLAMA_HOST"):
         print(
             "  3. Add 'export OLLAMA_HOST=http://loki.local:11434' to your shell profile"

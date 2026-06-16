@@ -39,8 +39,6 @@ llm-config/
 │   │   └── <persona>.md
 │   ├── skills/                       # General-purpose skills with no domain coupling
 │   │   └── <skill>/SKILL.md
-│   ├── extensions/                   # Extension manifests — one TOML per globally installed tool
-│   │   └── <extension>.toml
 │   └── models/                       # Shared model provider configs — one JSON + companion TOML per provider
 │       ├── <provider>.json
 │       └── <provider>.toml           # declares which harnesses support this provider
@@ -57,8 +55,7 @@ llm-config/
 │   ├── registry.py                   # Registry loader + placeholder substitution (one definition)
 │   ├── sync.py                       # Drift detection and block/agent propagation
 │   ├── verify.py                     # Congruence tests (exits non-zero on drift)
-│   ├── bootstrap.py                  # Idempotent machine setup (symlinks, generated files, skills)
-│   └── wire_extensions.py            # Extension file generation and wiring (called by bootstrap.py)
+│   └── bootstrap.py                  # Idempotent machine setup (symlinks, generated files, skills)
 ├── .gitignore
 └── README.md
 ```
@@ -179,76 +176,11 @@ New skills follow the same pattern: if general-purpose, add `shared/skills/{name
 
 ---
 
-## Extensions / tools — wiring globally installed third-party tools
+## Third-party tools — out of scope
 
-Skills and blocks handle LLM-authored content. Tools (called "extensions" in the codebase) are a different category: third-party programs (installed via brew, npm, or cloned from git) that need per-harness configuration to activate. The installation itself is outside llm-config's scope; the repo owns the wiring only.
+Hooks, MCP server registrations, plugin installations, and other per-harness wiring for third-party tools are managed natively by each harness's own configuration system. This pattern covers content (blocks, agents, skills, seeds, models) and the mechanisms for keeping that content congruent across harnesses. Tool wiring is a deployment concern, not a content concern.
 
-The expected install paradigm is **install once at the system level, then llm-config wires each harness**. Two caveats: (1) some harnesses sandbox their tooling, e.g. pi installs npm packages into `~/.pi/agent/npm/` regardless of any global install, so for pi the wiring is a *declaration in `pi/settings.json` `packages[]`* that pi resolves into a sandboxed install; (2) MCP servers register per-harness in each harness's MCP config file, except where the harness loads MCP servers through a plugin runtime (e.g. Claude Code, where the plugin directory's manifest registers MCP servers without a config entry).
-
-Each tool is declared in one TOML manifest at `shared/extensions/<name>.toml`. `wire_extensions.py` generates harness-specific files from those declarations: copilot hook JSON files, pi TypeScript extension stubs, and aggregated MCP configs.
-
-**Manifest schema:**
-
-```toml
-name = "MyTool"
-repo = "https://github.com/owner/mytool"
-install = "brew install mytool"   # for reference; not run by llm-config
-block = "mytool"                  # shared block carrying the LLM-facing instructions
-
-# Optional: top-level [mcp] section if this tool ships an MCP server.
-# Harnesses opt in by listing "mcp" in their mechanisms.
-[mcp]
-command = "mytool"
-args = ["--mcp"]
-
-# Optional: command-based hooks rendered per harness by wire_extensions.py.
-# Each [[hooks]] entry becomes one event handler. copilot_event → JSON file;
-# pi_event → TypeScript stub. Omit a field to skip that harness.
-[[hooks]]
-copilot_event = "PreToolUse"
-pi_event = "tool_call"
-command = "mytool hook"
-timeout = 5
-
-[harnesses.claude-code]
-mechanisms = ["hook"]                  # vocabulary used in the TOOLS table
-verify_hook = "mytool hook claude"     # substring to find in PreToolUse hook commands
-manual_setup = "mytool init -g"        # one-time command, printed in bootstrap checklist
-
-[harnesses.copilot]
-mechanisms = ["hook", "mcp"]
-symlinks = [["harnesses/copilot/hooks/mytool.json", "~/.github/hooks/mytool.json"]]
-verify_mcp = "~/.copilot/mcp-config.json"
-manual_setup = "mytool init -g --copilot"
-
-[harnesses.pi]
-mechanisms = ["pi-ext", "mcp"]
-symlinks = [["harnesses/pi/extensions/mytool.ts", "~/.pi/agent/extensions/mytool.ts"]]
-verify_mcp = "~/.pi/agent/mcp.json"
-# omit the entire [harnesses.<h>] block if this tool isn't wired for that harness
-```
-
-The `mechanisms` field is the integration-shape vocabulary; report.py renders it directly into the TOOLS table cell. Conventional values: `hook` (settings hook or hook JSON), `plugin` (plugin directory), `skill` (skill symlink), `pi-npm` / `pi-git` (pi sandbox install), `pi-ext` (pi TypeScript extension), `mcp` (MCP server registration).
-
-Tools whose pi wiring requires more than a simple command (e.g. version checks, custom rewrite logic) should keep a hand-authored `.ts` file and use `symlinks` without `[[hooks]]`. Tools that exist only as MCP servers (no hook, no symlink, no install overhead) still get a manifest — just `name` + `[mcp]` + a `[harnesses.<h>]` block with `mechanisms = ["mcp"]`.
-
-Supported verify check types (one per harness, checked by `report.py`):
-- `verify_hook`: substring to find in a PreToolUse hook command in the Claude Code settings
-- `verify_dir`: directory path to check for existence (used for plugin installs)
-- `verify_mcp`: path to an MCP config file to check for server registration
-- `verify_pi_package`: package identifier (e.g. `npm:context-mode`) to find in `harnesses/pi/settings.json` `packages[]`
-
-**`wire_extensions.py`** reads all manifests, then:
-1. Generates copilot hook JSON files and pi TypeScript stubs from `[[hooks]]` entries
-2. Generates harness MCP configs by walking every manifest's `[mcp]` section and including each in the harnesses that opt in via `mechanisms = [..., "mcp"]`
-3. Creates `symlinks` declared per harness
-4. Prints a `manual_setup` checklist for one-time steps that cannot be automated
-
-Pass `--check` to report drift in generated files without writing. `verify.py` calls this automatically.
-
-Generated files are committed to the repo (same pattern as rendered agent files) — `git diff` always shows what changed. `bootstrap.py` calls `wire_extensions.py` automatically. **Adding a new extension requires no changes to `bootstrap.py` or `report.py`** — drop a TOML in `shared/extensions/` and both tools pick it up.
-
-The LLM-facing instruction content for each extension lives in the shared block named by `block`. The manifest handles only the mechanism (wiring and generation); the block handles the content (what the LLM reads).
+LLM-facing instruction content for a third-party tool (routing tables, blocked-command lists, tool selection hierarchies) belongs in the catalog as a `requested`-tier task rule. It is activated when the tool is in use rather than loaded unconditionally in every session, which keeps always-on doctrine small and honest.
 
 ---
 
@@ -279,11 +211,10 @@ REPO=~/repos/llm-config
 
 Without a congruence check, drift is invisible. The natural workflow — refining instructions while actively working in a specific harness — means you regularly improve one harness's config directly. Without a tool to detect when those improvements diverge from the shared source, the divergence just accumulates silently. Two harnesses start behaving differently for no intentional reason, and you can't tell from the files themselves when the split happened or whether it was deliberate.
 
-`verify.py` makes drift a visible, actionable state rather than a silent one. It checks three things:
+`verify.py` makes drift a visible, actionable state rather than a silent one. It checks two things:
 
 1. **Block congruence:** every `<!-- block: name -->` fence in every harness file matches `shared/blocks/{name}.md` verbatim (after normalizing trailing whitespace).
 2. **Agent congruence:** the body of every rendered agent file in `harnesses/{harness}/agents/` matches `shared/agents/{name}.md` verbatim (excluding frontmatter lines).
-3. **Manifest-derived files:** the generated hook JSON, pi extension stubs, and aggregated MCP configs match what `shared/extensions/*.toml` declares (via `wire_extensions.py --check`).
 
 Exit codes:
 - `0` — all harnesses are in sync
@@ -308,8 +239,6 @@ Pre-commit hooks (configured in `.pre-commit-config.yaml`) run `verify.py` along
 - Every shared agent, which harnesses have a rendered file
 - Every detected skill, whether its symlinks are valid and non-dangling, and the live target path
 - Every shared model config, which harnesses have a symlink to it, and which harnesses are explicitly excluded (e.g. cloud-only harnesses that can't use local model routing)
-- A unified TOOLS table showing each declared tool's integration mechanism per harness (one row per tool, one column per harness, mechanism vocabulary in each cell — `hook`, `plugin`, `skill`, `pi-npm`, `pi-ext`, `mcp`, or `+`-joined combinations)
-- Drift between manifest sources (`shared/extensions/*.toml`) and the per-harness files they render to in the repo (same check as `wire_extensions.py --check`)
 - All bootstrap-managed symlinks and generated files, plus their wiring status
 - Drift between bootstrap-generated live files (with placeholders resolved) and the rendered template — surfaced as a warning with a unified diff and manual-resolution instructions
 
@@ -330,8 +259,8 @@ Harness-specific sections are always shown and never cause a non-zero exit — t
 
 ## Workflow: editing shared content
 
-**To change something universal** (e.g., update the RTK instructions):
-1. Edit `shared/blocks/rtk.md`
+**To change something universal** (e.g., update the git conventions):
+1. Edit `shared/blocks/git-conventions.md`
 2. Run `python tools/sync.py --apply` — rewrites the fenced block in every harness file
 3. Commit everything together
 
@@ -363,8 +292,6 @@ Harness-specific sections are always shown and never cause a non-zero exit — t
 | Harness wiring (symlinks, generated files, skill dirs) | `tools/harnesses.toml` | One registry read by sync, report, and bootstrap |
 | General-purpose skill | `shared/skills/<name>/SKILL.md` | No per-harness adaptation needed |
 | Domain-specific skill | External domain repo; symlinked by `bootstrap.py` | Evolves with the domain it serves |
-| Extension wiring | `shared/extensions/<name>.toml` | Per-harness wiring for globally installed tools |
-| Extension instruction content | `shared/blocks/<name>.md` | Same as any other shared block |
 | Model provider config (multi-harness) | `shared/models/<provider>.json` + `.toml` | Config consumed by harness runtimes that support a multi-provider registry (e.g. pi); harnesses with alternative wiring (e.g. Claude Code via `ollama launch claude`) are noted in the companion `.toml` |
 | Harness-specific config | `harnesses/<harness>/<config>.json` | Harness or machine specific; never synced |
 | Machine-specific values | Edited in-place after bootstrap, never committed | Must match this machine's runtime |
@@ -395,18 +322,16 @@ Alternatively, ask any agent that has access to this repo: *"Add a rule to code-
 
 ### Adding new cross-harness functionality (e.g., connecting to llm-wiki)
 
-This involves two artifacts: a skill (procedural instructions for the LLM) and an activation block (a short note in each harness's global instructions telling it the skill exists).
+A skill whose activation is entirely description-driven requires only one artifact: the `SKILL.md` file. The harness loads it on demand when the task matches the skill's description; no always-on doctrine block is needed, keeping the context budget honest.
 
-1. Write `shared/skills/wiki-ops/SKILL.md` — the canonical skill definition, with `name` and `description` frontmatter.
-2. Write `shared/blocks/llm-wiki.md` — a short block explaining how to invoke wiki-ops (the activation hint embedded in every harness's global instructions).
-3. Add the skill name to the registry's `skills` list, then run `python tools/bootstrap.py --skill wiki-ops` — symlinks the skill into every harness's skill directory.
-4. Add `<!-- block: llm-wiki -->` fences in the appropriate section of each harness instruction file, then run `python tools/sync.py --apply` to populate them.
-5. Run `python tools/verify.py` — confirms all three harnesses have the identical activation block.
+1. Write `shared/skills/wiki-ops/SKILL.md` — the canonical skill definition, with `name` and `description` frontmatter. The description carries the full activation signal ("use when working inside an llm-wiki project directory").
+2. Add the skill name to the registry's `skills` list, then run `python tools/bootstrap.py --skill wiki-ops` — symlinks the skill into every harness's skill directory.
+3. Run `python tools/verify.py` — confirms skill symlinks are valid across all harnesses.
 
-An agent can own steps 3–5 entirely: *"Wire up the wiki-ops skill across all harnesses and verify congruence."* The agent registers the skill, adds the fences, syncs, and verifies. You only authored the skill and the block.
+An agent can own steps 2–3 entirely: *"Wire up the wiki-ops skill across all harnesses and verify congruence."*
 
-**Files authored:** `shared/skills/wiki-ops/SKILL.md`, `shared/blocks/llm-wiki.md`
-**Commands:** `bootstrap.py --skill` → `sync.py --apply` → `verify.py`
+**Single file authored:** `shared/skills/wiki-ops/SKILL.md`
+**Commands:** `bootstrap.py --skill` → `verify.py`
 **Manual propagation:** none
 
 ---
@@ -431,7 +356,7 @@ An agent can own steps 3–5 entirely: *"Wire up the wiki-ops skill across all h
 
 This is the exact scenario that motivated this repo. When a harness becomes unavailable or undesirable, the goal is to remove it without touching anything shared.
 
-1. Run `python tools/bootstrap.py --remove {harness}` — unlinks every symlink and generated file the registry and extension manifests declare for that harness, then moves `harnesses/{harness}/` to `harnesses/_deprecated/{harness}/` (kept in the repo for reference, not deleted).
+1. Run `python tools/bootstrap.py --remove {harness}` — unlinks every symlink and generated file the registry declares for that harness, then moves `harnesses/{harness}/` to `harnesses/_deprecated/{harness}/` (kept in the repo for reference, not deleted).
 2. Delete the harness entry from `tools/harnesses.toml`.
 3. Run `python tools/verify.py` — should pass cleanly since the removed harness is no longer checked.
 4. Commit.
@@ -449,11 +374,12 @@ Shared blocks, skills, and agent bodies are untouched. The remaining harnesses c
 `bootstrap.py` is idempotent — safe to re-run. The sequence on a new machine:
 
 1. Clone the repo: `git clone ... ~/repos/llm-config`
-2. Run `python tools/bootstrap.py` — creates all symlinks, wires skills and extensions, reports what needs manual attention.
+2. Run `python tools/bootstrap.py` — creates all symlinks, wires skills, reports what needs manual attention.
 3. Edit machine-specific values by hand (bootstrap prints a checklist):
    - `shared/models/ollama.json` — update Ollama `baseUrl` to this machine's address
    - Copy `~/.pi/agent/auth.json` from backup or recreate with API keys (never committed)
-4. Run `python tools/verify.py` — confirms no drift was introduced during setup.
+4. Wire third-party tools per harness natively (plugin installs, hook configs, MCP registrations) — these are outside bootstrap's scope and documented in the repo's README.
+5. Run `python tools/verify.py` — confirms no drift was introduced during setup.
 
 Machine-specific values are never committed and never synced. The repo is the config; the machine is the runtime. Bootstrap bridges the two.
 
@@ -528,7 +454,7 @@ For someone implementing this pattern from scratch, or restoring to a completely
    ```bash
    mkdir ~/repos/llm-config && cd ~/repos/llm-config
    git init
-   mkdir -p shared/blocks shared/agents shared/skills shared/extensions shared/models
+   mkdir -p shared/blocks shared/agents shared/skills shared/models
    mkdir -p harnesses/harness-a harnesses/harness-b
    mkdir -p tools
    ```
@@ -560,7 +486,7 @@ For someone implementing this pattern from scratch, or restoring to a completely
    git add -A && git commit -m "init: llm-config"
    ```
 
-10. **Complete manual steps** — extension one-time setup, API keys, machine-specific config values. `bootstrap.py` should print a checklist.
+10. **Complete manual steps** — third-party tool wiring (per-harness, native), API keys, machine-specific config values. `bootstrap.py` prints a checklist for the config values it knows about.
 
 ---
 

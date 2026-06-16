@@ -11,6 +11,9 @@ reviewed: 2026-06
 
 # Wiki Ops
 
+Wiki repos live at `~/repos/llm-wiki/` (or any directory whose `AGENTS.md`
+references this pattern). Invoke this skill for ingest, query, or lint work.
+
 Universal workflow skill for LLM-maintained wikis. The per-wiki `AGENTS.md`
 holds domain context; this skill holds the operational procedures.
 
