@@ -246,13 +246,20 @@ def inspect_skills(errors: list, warnings: list):
         console.print("\n  [dim]no skills detected[/dim]")
         return
 
+    # only registry-managed skills are expected in every harness; others are local
+    registry_skills = set(registry.skills())
+
     for skill_name, by_harness in sorted(skills.items()):
         console.print(f"\n  [bold cyan]{skill_name}[/bold cyan]")
+        is_registry_skill = skill_name in registry_skills
 
         for harness in skill_dirs:
             if harness not in by_harness:
-                _harness_row(harness, "[dim]not wired[/dim]")
-                warnings.append(f"skill '{skill_name}': not wired in {harness}")
+                if is_registry_skill:
+                    _harness_row(harness, "[dim]not wired[/dim]")
+                    warnings.append(f"skill '{skill_name}': not wired in {harness}")
+                else:
+                    _harness_row(harness, "[dim]—  local only[/dim]")
                 continue
 
             p = by_harness[harness]
