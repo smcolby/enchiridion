@@ -416,7 +416,7 @@ How this pattern composes with cross-harness-config-pattern.md when both are imp
 - **Playbooks are ordinary skills** riding the distribution pattern's skill mechanism unchanged; operations ship as playbooks per the trigger matrix, with capture embedded in review playbooks and one doctrine sentence.
 - **Seeds are never wired into harnesses**; the seed playbook consumes them at repo-creation time, so they need only live in the repo.
 - **verify() extends the distribution pattern's congruence tool** with rule schema validation and the doctrine token ceiling (the ceiling declared in the registry, so generator and verifier read one number); the inspection tool gains a rules view. The audit schedule is a harness scheduling feature or a calendar reminder; it needs no repo infrastructure.
-- **Third-party tool wiring is out of scope for both patterns.** Hooks, MCP server registrations, and plugin installations are managed per-harness natively; their LLM-facing instruction content (routing tables, blocked-command lists) lives in the catalog as `requested`-tier task rules, activated when the relevant tools are present rather than loaded unconditionally.
+- **Third-party tool wiring is out of scope for both patterns.** Hooks, MCP server registrations, and plugin installations are managed per-harness natively; their LLM-facing instruction content (routing tables, blocked-command lists) lives in the catalog as `requested`-tier task rules, activated when the relevant tools are present.
 
 ---
 

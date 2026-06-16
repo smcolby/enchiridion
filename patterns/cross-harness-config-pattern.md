@@ -180,7 +180,7 @@ New skills follow the same pattern: if general-purpose, add `shared/skills/{name
 
 Hooks, MCP server registrations, plugin installations, and other per-harness wiring for third-party tools are managed natively by each harness's own configuration system. This pattern covers content (blocks, agents, skills, seeds, models) and the mechanisms for keeping that content congruent across harnesses. Tool wiring is a deployment concern, not a content concern.
 
-LLM-facing instruction content for a third-party tool (routing tables, blocked-command lists, tool selection hierarchies) belongs in the catalog as a `requested`-tier task rule. It is activated when the tool is in use rather than loaded unconditionally in every session, which keeps always-on doctrine small and honest.
+LLM-facing instruction content for a third-party tool (routing tables, blocked-command lists, tool selection hierarchies) belongs in the catalog as a `requested`-tier task rule. It is activated when the tool is in use, keeping always-on doctrine small and honest.
 
 ---
 
@@ -322,7 +322,7 @@ Alternatively, ask any agent that has access to this repo: *"Add a rule to code-
 
 ### Adding new cross-harness functionality (e.g., connecting to llm-wiki)
 
-A skill whose activation is entirely description-driven requires only one artifact: the `SKILL.md` file. The harness loads it on demand when the task matches the skill's description; no always-on doctrine block is needed, keeping the context budget honest.
+A skill whose activation is entirely description-driven requires only one artifact: the `SKILL.md` file. The skill description carries the full activation signal; the context budget stays honest without a companion doctrine block.
 
 1. Write `shared/skills/wiki-ops/SKILL.md` — the canonical skill definition, with `name` and `description` frontmatter. The description carries the full activation signal ("use when working inside an llm-wiki project directory").
 2. Add the skill name to the registry's `skills` list, then run `python tools/bootstrap.py --skill wiki-ops` — symlinks the skill into every harness's skill directory.
