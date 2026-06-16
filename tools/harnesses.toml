@@ -16,6 +16,12 @@
 # Dropping a harness: python tools/bootstrap.py --remove <name>, then delete
 # its entry here.
 
+# external skill repos (home-relative paths) linked into every harness skill_dir
+# the skill name is taken from the repo directory name
+external_skills = [
+    "~/repos/llm-wiki",
+]
+
 # shared skills wired into every harness that declares a skill_dir
 skills = [
     "wiki-ops",

@@ -102,6 +102,28 @@ def wire_skill(skill: str) -> None:
     print(f"  skill '{skill}' wired")
 
 
+def wire_external_skills() -> None:
+    """Symlink external skill repos into every harness skill_dir.
+
+    Sources are listed as home-relative paths under external_skills in harnesses.toml.
+    """
+    sources: list[str] = registry.load().get("external_skills", [])
+    if not sources:
+        return
+    print("Wiring external skills...")
+    for source_str in sources:
+        source = Path(source_str).expanduser()
+        if not source.is_dir():
+            print(f"  SKIP {source.name} — {source} not found")
+            continue
+        for conf in registry.harnesses().values():
+            if "skill_dir" not in conf or not harness_installed(conf):
+                continue
+            link(source, expand(conf["skill_dir"]) / source.name)
+        print(f"  {source.name} wired")
+    print()
+
+
 def wire_only(target: str) -> None:
     """Re-wire the single registry entry whose live path matches target."""
     t = Path(target).expanduser().absolute()
@@ -174,6 +196,8 @@ def main() -> None:
     for skill in registry.skills():
         wire_skill(skill)
     print()
+
+    wire_external_skills()
 
     print("=== Manual steps required ===")
     print("  1. Edit shared/models/ollama.json — update Ollama baseUrl to this machine's address")

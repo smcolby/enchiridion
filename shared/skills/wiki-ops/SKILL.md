@@ -11,27 +11,16 @@ reviewed: 2026-06
 
 # Wiki Ops
 
-Wiki repos live at `~/repos/llm-wiki/` (or any directory whose `AGENTS.md`
-references this pattern). Invoke this skill for ingest, query, or lint work.
-
 Universal workflow skill for LLM-maintained wikis. The per-wiki `AGENTS.md`
-holds domain context; this skill holds the operational procedures.
-
-The `ctx_*` calls below assume the context-mode extension. When those tools
-are unavailable in a session, substitute native equivalents (read, grep,
-file-walking scripts); the workflows apply unchanged.
+holds domain context; this skill holds the operational procedures. The wiki
+repo path is provided by the user or inferred from the working directory.
 
 ---
 
 ## Boot (run at session start)
 
-```
-1. read index.md                          — orient to existing wiki content
-2. ctx_index(path: "wiki/", source: "wiki-<name>")  — load pages into FTS5
-3. read last entry of log.md              — check what was done most recently
-```
-
-The `<name>` in the source label should match the wiki's domain (e.g., `wiki-openamdet`).
+1. Read `index.md` — orient to existing wiki content and page count
+2. Read the last entry of `log.md` — check what was done most recently
 
 ---
 
@@ -42,12 +31,10 @@ Triggered by: "ingest this", "add this source", "process [file/URL]"
 ### Steps
 
 **Read the source**
-- If a file path: use `read` (for files you will reference by exact text later)
-  or `ctx_execute_file` (for large files where you only need a summary)
-- If a URL: use `ctx_fetch_and_index(url, source: "raw-<slug>")`, then
-  `ctx_search` to extract key content
-- If a repository: read `README.md`, key source files, and any docs/ directory;
-  use `ctx_batch_execute` to gather multiple files in parallel
+- If a file path: use the Read tool
+- If a URL: use WebFetch
+- If a repository: read `README.md`, key source files, and any `docs/` directory;
+  fetch multiple files in parallel when there are 3 or more
 
 **Discuss with user (interactive)**
 - Summarize the 3–5 most important takeaways
@@ -64,9 +51,8 @@ Triggered by: "ingest this", "add this source", "process [file/URL]"
   - If the page exists: read it, then edit to integrate new information;
     note any contradiction with existing claims using a `> ⚠️ Contradiction:` blockquote
   - If the page doesn't exist: create it with the standard frontmatter
-- Update pages in parallel via the harness's subagent mechanism (e.g. parallel
-  agent tasks, concurrency ~4) when there are 3+ pages to update and the
-  updates are independent
+- Update pages in parallel via the harness's subagent mechanism (concurrency ~4)
+  when there are 3 or more independent updates
 
 **Update `wiki/overview.md`**
 - Add the new source to the source count
@@ -89,9 +75,9 @@ Triggered by: direct questions about wiki content
 
 ### Steps
 
-1. `ctx_search(queries: ["<question terms>"], source: "wiki-<name>")` — find
-   relevant pages (batch multiple angle queries in one call)
-2. Read the top 2–3 pages in full if snippets are insufficient
+1. Search for relevant pages using Bash (`grep -r "<terms>" wiki/`) or by reading
+   `index.md` and navigating to candidate pages
+2. Read the top 2–3 pages in full if the index is insufficient
 3. Synthesize an answer with `[[page]]` citations
 4. Ask: "Should I save this as a wiki page?" — if yes, write to an appropriate
    path (e.g., `wiki/concepts/` or a new `wiki/analyses/` subdirectory)
@@ -106,30 +92,29 @@ Triggered by: "lint the wiki", "health check", "find orphan pages"
 
 ### Steps
 
-1. `ctx_index(path: "wiki/", source: "wiki-<name>")` — ensure FTS5 is current
-2. Run `ctx_execute` to scan for structural issues:
+1. Run the following analysis via Bash:
 
 ```javascript
-// find pages with no outbound wikilinks
-const fs = require('fs');
-const path = require('path');
+// Save as a temp file and run with: node /tmp/wiki-lint.mjs
+import { readFileSync, readdirSync, statSync } from 'fs';
+import { join, basename, extname } from 'path';
 
 function walk(dir) {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e =>
-    e.isDirectory() ? walk(path.join(dir, e.name)) : path.join(dir, e.name)
+  return readdirSync(dir, { withFileTypes: true }).flatMap(e =>
+    e.isDirectory() ? walk(join(dir, e.name)) : join(dir, e.name)
   );
 }
 
 const pages = walk('wiki').filter(f => f.endsWith('.md'));
-const allSlugs = new Set(pages.map(f => path.basename(f, '.md')));
+const allSlugs = new Set(pages.map(f => basename(f, '.md')));
 
 const report = pages.map(f => {
-  const content = fs.readFileSync(f, 'utf8');
+  const content = readFileSync(f, 'utf8');
   const outbound = [...content.matchAll(/\[\[([^\]]+)\]\]/g)].map(m => m[1]);
   const broken = outbound.filter(s => !allSlugs.has(s.toLowerCase().replace(/ /g, '-')));
   const isOrphan = !pages.some(other => {
     if (other === f) return false;
-    return fs.readFileSync(other, 'utf8').includes(`[[${path.basename(f, '.md')}]]`);
+    return readFileSync(other, 'utf8').includes(`[[${basename(f, '.md')}]]`);
   });
   return { file: f, outbound: outbound.length, broken, orphan: isOrphan };
 });
@@ -138,20 +123,19 @@ console.log('=== broken links ===');
 report.filter(r => r.broken.length).forEach(r =>
   console.log(`${r.file}: broken → ${r.broken.join(', ')}`)
 );
-
 console.log('\n=== orphan pages (no inbound links) ===');
 report.filter(r => r.orphan && !r.file.includes('overview') && !r.file.includes('index'))
   .forEach(r => console.log(r.file));
-
 console.log('\n=== pages with no outbound links ===');
 report.filter(r => r.outbound === 0).forEach(r => console.log(r.file));
 ```
 
-3. `ctx_search` for contradiction markers: `ctx_search(queries: ["Contradiction", "⚠️"])`
-4. Check `index.md` for pages not listed (run a diff between index entries and actual files)
-5. Report findings grouped by: broken links, orphans, contradictions, index gaps
-6. Ask user which issues to fix automatically vs. flag for human review
-7. Append to `log.md` as `## [YYYY-MM-DD] lint | N issues found, N fixed`
+2. Search for contradiction markers: `grep -r "Contradiction\|⚠️" wiki/`
+3. Check `index.md` for pages not listed: diff index entries against
+   `find wiki -name "*.md"` output
+4. Report findings grouped by: broken links, orphans, contradictions, index gaps
+5. Ask user which issues to fix automatically vs. flag for human review
+6. Append to `log.md` as `## [YYYY-MM-DD] lint | N issues found, N fixed`
 
 ---
 
