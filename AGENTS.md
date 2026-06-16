@@ -13,7 +13,7 @@ A shared block is byte-for-byte identical in every harness that includes it. `ve
 
 ## How to change things
 
-Every change ends with `python tools/verify.py` clean, then a commit. Symlinks make the commit live; do not hand-edit live files under `~/.claude`, `~/.pi`, or `~/.github`.
+Every change ends with `python tools/verify.py` clean, then a commit. Symlinks make the commit live; do not hand-edit enchiridion-managed live files (instruction files, settings, agents, rules) — edit the source in `shared/` or `harnesses/` instead. Third-party tool configs (hook JSONs, MCP configs, extension TypeScript) live outside the repo and are edited directly.
 
 - **Universal behavior** (doctrine): edit `shared/blocks/<topic>.md`, then `python tools/sync.py --apply`. Doctrine has a hard token ceiling; net additions need a demotion candidate.
 - **A coding rule**: edit `shared/rules/<axis>/<name>.md` (frontmatter: name, description, tier, scope, stack, reviewed), then `python tools/sync.py --rules --apply` to revalidate and regenerate the router index plus the Claude Code path-scoped renders in `harnesses/claude-code/rules/`. Prefer the `catalog-ingest` skill for external content.
@@ -27,5 +27,5 @@ Every change ends with `python tools/verify.py` clean, then a commit. Symlinks m
 
 - Follow the global doctrine and the deployed coding rules; consult the `rules` skill index before editing `tools/*.py`.
 - One generator-verifier rule: placeholder substitution and registry topology live once in `tools/registry.py`; never duplicate them into a sibling tool.
-- Generated files (rendered agents, router index, rendered Claude rules, manifest-derived hooks/MCP configs) are committed so `git diff` shows what changed; regenerate them with the relevant tool rather than editing by hand.
+- Generated files (rendered agents, router index, rendered Claude rules) are committed so `git diff` shows what changed; regenerate them with the relevant tool rather than editing by hand.
 - Do not bypass the gate. The commit-msg hook rejects conventional-commit prefixes and authorship footers; follow the git conventions in doctrine.

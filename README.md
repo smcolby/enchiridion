@@ -47,7 +47,6 @@ shared/        canonical content
   agents/      persona bodies; frontmatter rendered per harness
   skills/      playbooks + the generated rules router; symlinked into every harness
   seeds/       repo archetypes: AGENTS.md template, gate configs, rule selection
-  extensions/  TOML manifests wiring third-party tools (RTK, context-mode, ...)
   models/      shared model-provider configs
 harnesses/     per-harness composition: instruction file + configs + rendered agents
 patterns/      the two pattern documents this repo implements
@@ -88,12 +87,6 @@ python tools/sync.py --agents --apply        # renders per-harness frontmatter
 Personas carry stance only; procedure belongs in a playbook, conventions in a rule.
 
 **Seed a repository:** invoke the `repo-seed` skill from any harness session in the target repo. It detects language, stack, environment manager, and existing instruction files, asks at most four questions, and deploys provenance-stamped rules plus an `AGENTS.md`.
-
-**Wire a third-party tool:**
-```bash
-$EDITOR shared/extensions/<name>.toml        # mechanisms, hooks, verify checks
-python tools/bootstrap.py
-```
 
 **Reconcile drift** (verify reports a harness file differs from shared): decide first, then act. Promote the change into `shared/` if it should be universal, or move it outside the block fence if harness-specific. ⚠ `sync.py --apply` always overwrites fenced content with shared; promote first or lose the change.
 
