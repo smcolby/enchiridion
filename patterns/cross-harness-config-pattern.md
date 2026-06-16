@@ -410,9 +410,7 @@ There is no sync step because the skill directory is symlinked wholesale, not co
 
 Skills tightly coupled to a specific project or knowledge domain live in that project's repo, not in `llm-config`. The skill evolves with the thing it knows about — a wiki restructure and its skill update can land in the same commit, in the right repo.
 
-- The canonical `SKILL.md` lives in the source repo (e.g. `~/repos/my-project/.skills/my-skill/`)
-- `bootstrap.py` symlinks from the source repo into each harness's skill directory; `shared/skills/` always takes precedence when both define the same skill name
-- Editing the skill in the source repo propagates to all harnesses automatically via those symlinks
+The canonical `SKILL.md` lives in the source repo (e.g. `~/repos/my-project/.skills/my-skill/`). The harness accesses it when working inside that directory: the repo's own `AGENTS.md` provides domain context, and the wiki-ops or domain skill loads on demand by description match. No bootstrap wiring is needed for this to work.
 
 **Decision rule:** a skill travels with the thing it knows about. If a skill is tightly coupled to a specific project or data domain, it stays in that project's repo. If it becomes general-purpose and useful regardless of domain context, it graduates to `shared/skills/` in `llm-config` directly.
 

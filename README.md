@@ -125,6 +125,6 @@ Third-party tools are wired per-harness natively after bootstrap:
 |---|---|---|---|
 | context-mode | `/plugin marketplace add mksglu/context-mode` then `/plugin install context-mode@context-mode` | `npm install -g context-mode` + add MCP entry to `~/.pi/agent/mcp.json` | add MCP entry to `~/.copilot/mcp-config.json` + configure hook |
 | RTK | already wired via `settings.json` hook | install pi extension | configure hook |
-| wiki-ops | clone `~/repos/llm-wiki`; bootstrap wires the skill symlink | clone + skill symlink | configure hook |
+| wiki-ops | clone `~/repos/llm-wiki`; work within it directly — `AGENTS.md` provides context | clone; work within it directly | clone; work within it directly |
 
 Never committed: API keys and `auth.json` files, `~/.claude.json` (harness-managed, may hold tokens), pi sandbox installs and session data, `harnesses/_deprecated/`.
