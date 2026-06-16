@@ -172,7 +172,7 @@ On-demand loading via a native skill directory is strongly preferred over inlini
 
 Claude Code's `~/.claude/skills/` directory serves double duty: it is both a skill directory and a plugin directory (for repos that define `hooks/hooks.json` and `.claude-plugin/plugin.json`). The `enabledPlugins` key in `settings.json` activates plugins installed here.
 
-New skills follow the same pattern: if general-purpose, add `shared/skills/{name}/SKILL.md` and register the name in the registry's `skills` list; if domain-specific, place it in the domain repo and register it in `bootstrap.py` as an external source. Then run `bootstrap.py --skill <name>`. If the skill repo also ships hooks, enable it as a plugin in `settings.json`.
+New skills follow the same pattern: if general-purpose, add `shared/skills/{name}/SKILL.md` and register the name in the registry's `skills` list, then run `bootstrap.py --skill <name>`; if domain-specific, place it in the domain repo and work within that repo's directory — the harness reads the repo's own `AGENTS.md` for context and activates the wiki-ops or domain skill by description match. If the skill repo also ships hooks, enable it as a plugin in `settings.json`.
 
 ---
 
@@ -201,7 +201,7 @@ REPO=~/repos/llm-config
 
 `bootstrap.py` is idempotent: existing correct symlinks are skipped, broken ones replaced.
 
-**MCP configs are committed and symlinked** for harnesses whose configs are token-free (e.g. pi and Copilot). `bootstrap.py` symlinks them like any other harness file. The one exception is `~/.claude.json`, which Claude Code manages itself and may contain tokens — it is gitignored and never committed.
+**`~/.claude.json`** is managed by Claude Code itself and may contain tokens — it is gitignored and never committed. MCP configs and third-party tool hook files are managed per-harness natively outside this repo.
 
 **Machine-specific values** fall into two categories. Absolute paths embedded in config files (e.g., a `prompts` directory path, a statusline command path) are handled via placeholder substitution: the committed file contains a placeholder (`__REPO__` or `__HOME__`), and `bootstrap.py` generates the live file with the placeholder replaced. These files are declared under `generated` in the registry rather than `symlinks`, and the substitution function lives in `registry.py` so the report tool verifies against exactly what bootstrap renders. Other machine-specific values (e.g., a remote server's hostname in a model config) cannot be inferred and must be edited by hand after bootstrap. `bootstrap.py` prints a checklist of any remaining manual steps.
 
@@ -291,7 +291,7 @@ Harness-specific sections are always shown and never cause a non-zero exit — t
 | Agent frontmatter | Rendered by `sync.py` from the registry's `agents` sub-tables | Schema differs per harness |
 | Harness wiring (symlinks, generated files, skill dirs) | `tools/harnesses.toml` | One registry read by sync, report, and bootstrap |
 | General-purpose skill | `shared/skills/<name>/SKILL.md` | No per-harness adaptation needed |
-| Domain-specific skill | External domain repo; symlinked by `bootstrap.py` | Evolves with the domain it serves |
+| Domain-specific skill | External domain repo; accessed from within its directory | Evolves with the domain it serves |
 | Model provider config (multi-harness) | `shared/models/<provider>.json` + `.toml` | Config consumed by harness runtimes that support a multi-provider registry (e.g. pi); harnesses with alternative wiring (e.g. Claude Code via `ollama launch claude`) are noted in the companion `.toml` |
 | Harness-specific config | `harnesses/<harness>/<config>.json` | Harness or machine specific; never synced |
 | Machine-specific values | Edited in-place after bootstrap, never committed | Must match this machine's runtime |
