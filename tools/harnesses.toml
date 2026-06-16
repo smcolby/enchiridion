@@ -83,6 +83,7 @@ instruction_live = "~/.github/copilot-instructions.md"
 skill_dir = "~/.copilot/skills"
 symlinks = [
     ["harnesses/copilot/copilot-instructions.md", "~/.github/copilot-instructions.md"],
+    ["harnesses/copilot/settings.json", "~/.copilot/settings.json"],
     ["harnesses/copilot/agents", "~/.copilot/agents"],
 ]
 generated = []
