@@ -21,10 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import registry  # noqa: E402
-from registry import HOME, REPO, expand, render_template  # noqa: E402
-
-LLM_WIKI = HOME / "repos/llm-wiki"
-
+from registry import REPO, expand, render_template  # noqa: E402
 
 # ── primitives ────────────────────────────────────────────────────────────────
 
@@ -85,18 +82,10 @@ def wire_harness(name: str, conf: dict) -> None:
 
 
 def skill_source(skill: str) -> Path | None:
-    """Resolve a skill name to its canonical directory.
-
-    shared/skills/ is the source of truth; an external domain repo is the
-    fallback for skills that have not graduated (see
-    patterns/cross-harness-config-pattern.md).
-    """
+    """Resolve a skill name to its canonical directory."""
     shared = REPO / "shared/skills" / skill
     if shared.is_dir():
         return shared
-    external = LLM_WIKI / ".pi/skills" / skill
-    if external.is_dir():
-        return external
     return None
 
 
@@ -104,26 +93,13 @@ def wire_skill(skill: str) -> None:
     """Symlink a shared skill into every installed harness's skill directory."""
     src = skill_source(skill)
     if src is None:
-        print(f"  WARN skill '{skill}' not found in shared/skills/ or llm-wiki — skipping")
+        print(f"  WARN skill '{skill}' not found in shared/skills/ — skipping")
         return
     for conf in registry.harnesses().values():
         if "skill_dir" not in conf or not harness_installed(conf):
             continue
         link(src, expand(conf["skill_dir"]) / skill)
     print(f"  skill '{skill}' wired")
-
-
-def wire_external() -> None:
-    """Link sources that live outside this repo (external skill repos)."""
-    print("Wiring external sources...")
-    claude_dir = HOME / ".claude"
-    if not claude_dir.is_dir():
-        print("  SKIP — ~/.claude not found")
-        return
-    if LLM_WIKI.is_dir():
-        link(LLM_WIKI, claude_dir / "skills/llm-wiki")
-    else:
-        print(f"  SKIP llm-wiki — {LLM_WIKI} not cloned")
 
 
 def wire_only(target: str) -> None:
@@ -160,9 +136,6 @@ def remove_harness(name: str) -> None:
     if "skill_dir" in conf:
         for skill in registry.skills():
             unlink_if_symlink(expand(conf["skill_dir"]) / skill)
-    if name == "claude-code":
-        unlink_if_symlink(HOME / ".claude/skills/llm-wiki")
-
     archive_dir = REPO / "harnesses/_deprecated"
     archive_dir.mkdir(exist_ok=True)
     shutil.move(str(REPO / "harnesses" / name), str(archive_dir / name))
@@ -200,9 +173,6 @@ def main() -> None:
 
     for skill in registry.skills():
         wire_skill(skill)
-    print()
-
-    wire_external()
     print()
 
     print("=== Manual steps required ===")
