@@ -87,6 +87,6 @@ are: before touching files a rule's scope matches, read that rule.
 
 ## Coding Rules
 <!-- block: rules -->
-A scoped coding-rules catalog is installed as the `rules` skill. Before creating or modifying any file, in any directory, consult its index, which maps file patterns and task descriptions to rules, and read the matching rules. Before authoring any PR body or description, invoke the skill, read the `pr-authoring` rule, and follow its template-discovery and fallback-structure steps before writing a single word of the body. Before claiming code is correct, complete, or passing — including after running tests or reviewing a diff — invoke the skill and read the `code-honesty` rule. Directives marked as tool-enforced are gates: fix the code rather than fighting the linter.
+A scoped coding-rules catalog is installed as the `rules` skill. Before creating or modifying any file, in any directory, invoke the `rules` skill. Read the index it returns, then read every rule whose scope matches the target file and every rule whose tier is `requested` and whose description matches the current task. Do not write or edit any file until this step is complete. Before authoring any PR body or description, invoke the skill, read the `pr-authoring` rule, and follow its template-discovery and fallback-structure steps before writing a single word of the body. Before claiming code is correct, complete, or passing (including after running tests or reviewing a diff), invoke the skill and read the `code-honesty` rule.
 <!-- /block: rules -->
 
