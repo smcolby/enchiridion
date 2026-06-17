@@ -82,7 +82,7 @@ their subtree.
 
 Also honor scoped rule files committed in the repo (e.g. `.cursor/rules/`,
 `.github/instructions/`, `.claude/rules/`), regardless of which harness you
-are: before touching files a rule's scope matches, read that rule.
+are: before touching files a rule's scope matches, read that rule. Do not create or modify any file until that step is complete.
 <!-- /block: repo-instructions -->
 
 ## Coding Rules
