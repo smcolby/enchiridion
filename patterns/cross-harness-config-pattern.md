@@ -170,9 +170,9 @@ Each harness declares a `skill_dir` in the harness registry; `bootstrap.py` syml
 
 On-demand loading via a native skill directory is strongly preferred over inlining: an `@`-include line in the global instruction file (pointing at `SKILL.md`) also delivers the content, but it loads the full skill into every session whether or not it is needed. Treat `@`-includes as a fallback for a harness with no native skill support.
 
-Claude Code's `~/.claude/skills/` directory serves double duty: it is both a skill directory and a plugin directory (for repos that define `hooks/hooks.json` and `.claude-plugin/plugin.json`). The `enabledPlugins` key in `settings.json` activates plugins installed here.
+Claude Code's `~/.claude/skills/` directory serves double duty: it is both a skill directory and a plugin directory (for repos that define `hooks/hooks.json` and `.claude-plugin/plugin.json`). A repo symlinked here auto-loads as `<name>@skills-dir` on the next session, hooks included, with no `settings.json` entry: presence of the directory is the enable signal. The `enabledPlugins` key only persists an explicit override, and an entry pointing at an absent directory errors every turn, so prefer auto-discovery.
 
-New skills follow the same pattern: if general-purpose, add `shared/skills/{name}/SKILL.md` and register the name in the registry's `skills` list, then run `bootstrap.py --skill <name>`; if domain-specific, place it in the domain repo and work within that repo's directory — the harness reads the repo's own `AGENTS.md` for context and activates the wiki-ops or domain skill by description match. If the skill repo also ships hooks, enable it as a plugin in `settings.json`.
+New skills follow the same pattern: if general-purpose, add `shared/skills/{name}/SKILL.md` and register the name in the registry's `skills` list, then run `bootstrap.py --skill <name>`; if domain-specific, place it in the domain repo and work within that repo's directory — the harness reads the repo's own `AGENTS.md` for context and activates the wiki-ops or domain skill by description match. If the skill repo also ships hooks, have it self-install: a small idempotent script in the repo symlinks it into `~/.claude/skills/`, where Claude Code auto-discovers it as a plugin. Avoid a static `enabledPlugins` entry, which dangles on machines where the repo is absent.
 
 ---
 

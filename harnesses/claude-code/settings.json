@@ -36,8 +36,7 @@
     "command": "bash __HOME__/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "context-mode@context-mode": true,
-    "llm-wiki@skills-dir": true
+    "context-mode@context-mode": true
   },
   "extraKnownMarketplaces": {
     "context-mode": {
