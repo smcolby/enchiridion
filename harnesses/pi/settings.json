@@ -10,7 +10,6 @@
     "__REPO__/harnesses/pi/agents"
   ],
   "packages": [
-    "npm:context-mode",
     "npm:@ollama/pi-web-search",
     "git:github.com/smcolby/pi-powerline-footer"
   ]

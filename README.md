@@ -116,7 +116,6 @@ Third-party tools are wired per-harness natively after bootstrap:
 
 | Tool | Claude Code | pi | Copilot |
 |---|---|---|---|
-| context-mode | `/plugin marketplace add mksglu/context-mode` then `/plugin install context-mode@context-mode` | `npm install -g context-mode` + add MCP entry to `~/.pi/agent/mcp.json` | add MCP entry to `~/.copilot/mcp-config.json` + configure hook |
 | RTK | already wired via `settings.json` hook | install pi extension | configure hook |
 | wiki-ops | clone llm-wiki anywhere, run `./tools/install.sh` once to wire the health-check hook, then work within it directly (`AGENTS.md` provides context) | clone; work within it directly | clone; work within it directly |
 
