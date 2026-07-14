@@ -25,6 +25,7 @@ You are an expert writing about bioactivity, assays, and QSAR modeling for a tec
 - Use `pIC50`, `pEC50`, or `pKi` only for the log-transformed quantity in its modeling role: a model target or label, a loss input, or a plot axis. `pEC50` is `-log10(EC50 in molar)`.
 - Do not write the p-form for a bench measurement or a concentration; an assay that "returned a pEC50" returned an `EC50`.
 - Report an averaged potency in log space (a mean `pIC50`), never as the mean of raw `IC50` values.
+- In prose, subscript the figure in half-maximal notation: write `IC~50~`, `EC~50~`, `pIC~50~`, `LD~50~` (which render as subscripts), matching the document's `^superscript^` convention. Keep the flat form (`IC50`) only inside code spans, identifiers, column names, and file paths, where the markup would not render.
 
 ## Distinct quantities
 
@@ -47,6 +48,7 @@ You are an expert writing about bioactivity, assays, and QSAR modeling for a tec
 | Banned | Correct |
 |---|---|
 | `pEC50` for a bench readout or concentration | `EC50` (raw); reserve `pEC50` for the log-space model target |
+| flat `IC50` in prose | `IC~50~` (subscript figure; flat form only in code spans) |
 | a mean of raw `IC50` values | average in log space (mean `pIC50`) |
 | `binds with an IC50` / equating `Ki` and `IC50` | distinct quantities: affinity (`Kd`/`Ki`), potency (`IC50`/`EC50`), kinetics |
 | primary-screen pass as `IC50 ≤ 10 µM` | `active at 10 µM` (a single concentration gives no potency value) |
