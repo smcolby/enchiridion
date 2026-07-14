@@ -1,12 +1,12 @@
 ---
 name: admet-conventions
 description: >
-  ADMET and bioactivity terminology for prose: log-transformed potency
-  notation (pIC50/pEC50/pKi) versus raw-concentration notation
-  (IC50/EC50/Ki), primary-screen versus dose-response readouts, and
-  assay-context precision. Apply when writing or editing prose (blog
-  posts, papers, docs, READMEs) that discusses potency, assays,
-  screening, dose-response, or QSAR modeling targets.
+  ADMET and bioactivity terminology for prose: p-notation (pIC50/pEC50)
+  versus raw concentrations (IC50/EC50/Ki), affinity versus potency
+  versus kinetics, primary-screen versus dose-response readouts,
+  cross-assay comparison, censored values, log-space averaging, and
+  naming the evaluation split. Apply when writing or editing prose about
+  potency, assays, screening, or QSAR models.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx", "**/*.rst", "**/*.txt"]
 reviewed: 2026-07
@@ -17,27 +17,43 @@ You are an expert writing about bioactivity, assays, and QSAR modeling for a tec
 ## Principles
 
 1. Notation carries meaning: the p-prefix is a log10-molar transform, not a synonym for the raw measurement.
-2. A number's name must match the experiment that produced it; a readout implies its assay.
+2. A number's name must match the experiment that produced it, and a value is meaningless without its assay context.
 
 ## Potency notation
 
 - Use `IC50`, `EC50`, or `Ki` (with concentration units) when naming an experimental readout, a concentration, or a resolution ("nanomolar `IC50`").
 - Use `pIC50`, `pEC50`, or `pKi` only for the log-transformed quantity in its modeling role: a model target or label, a loss input, or a plot axis. `pEC50` is `-log10(EC50 in molar)`.
 - Do not write the p-form for a bench measurement or a concentration; an assay that "returned a pEC50" returned an `EC50`.
+- Report an averaged potency in log space (a mean `pIC50`), never as the mean of raw `IC50` values.
+
+## Distinct quantities
+
+- Keep equilibrium affinity (`Kd`, `Ki`), functional potency (`IC50`, `EC50`), and binding kinetics (`kon`, `koff`, residence time) distinct; do not equate or silently interconvert them. A compound does not "bind with an `IC50`".
+- A cellular `EC50` folds in permeability and efflux and need not match a biochemical `IC50`; a phenotypic or cell readout is not target engagement without controls.
 
 ## Assay readouts
 
 - A single-concentration primary screen classifies a compound as active or inactive at the tested concentration; it does not produce a potency value. Describe a pass as "active at 10 µM", never "IC50 ≤ 10 µM".
 - Reserve `IC50` and `EC50` for a dose-response (titration) with enough points to fit a curve; a potency number implies a dose-response was run.
+- State a censored value as censored: an inactive reported as `>30 µM` is not `30 µM`, and a screen threshold is a bound, not an exact potency.
+
+## Comparing values and reporting metrics
+
+- Do not compare or rank potencies measured in different assays, targets, or conditions without an explicit, justified bridge; compare within one assay format, or convert (`IC50` to `Ki` via Cheng-Prusoff) first.
+- When quoting model performance, name the evaluation split; a random split overstates accuracy on near-duplicate scaffolds, so say when a metric comes from a scaffold- or structure-aware split.
 
 ## Anti-hallucination
 
 | Banned | Correct |
 |---|---|
 | `pEC50` for a bench readout or concentration | `EC50` (raw); reserve `pEC50` for the log-space model target |
+| a mean of raw `IC50` values | average in log space (mean `pIC50`) |
+| `binds with an IC50` / equating `Ki` and `IC50` | distinct quantities: affinity (`Kd`/`Ki`), potency (`IC50`/`EC50`), kinetics |
 | primary-screen pass as `IC50 ≤ 10 µM` | `active at 10 µM` (a single concentration gives no potency value) |
-| an `IC50` from a single-concentration screen | an `IC50` only from a dose-response fit |
+| a censored `>30 µM` quoted as `30 µM` | keep it censored (a bound, not an exact value) |
+| comparing `IC50` across different assays | compare within one assay, or bridge explicitly |
+| a metric from an unstated or random split | name a scaffold- or structure-aware split |
 
 ## Scope
 
-These are prose conventions. The code-side counterparts (potency log-transform handling, censored values, cross-assay comparability, dose-response fitting, inhibition mechanism) live in the `medicinal-chemistry`, `biology`, and `chemoinformatics` rules, which scope to Python source.
+These are prose conventions. The code-side counterparts (potency log-transform handling, censored values, cross-assay comparability, dose-response fitting, inhibition mechanism, scaffold-aware splitting) live in the `medicinal-chemistry`, `biology`, and `chemoinformatics` rules, which scope to Python source.
