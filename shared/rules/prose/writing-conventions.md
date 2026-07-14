@@ -1,14 +1,15 @@
 ---
 name: writing-conventions
 description: >
-  Prose writing conventions for Markdown and other authored text:
-  punctuation discipline (no em-dashes, en-dashes, or sequential hyphens
-  as separators), no formulaic rhetorical patterns, no filler or
-  unprompted summaries, and a banned-vocabulary list. Apply when writing
-  or editing Markdown documents, READMEs, changelogs, or other prose.
+  Prose conventions for Markdown and authored text: punctuation
+  (no em-dashes, en-dashes, sequential hyphens), sentence construction
+  (adverb placement, subject-first phrasing, no cleft frames), grammar
+  (introductory comma, relative-pronoun agreement), acronym and jargon
+  glossing, heading case, US spelling, no filler, banned vocabulary.
+  Apply when writing or editing Markdown, READMEs, or prose.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx", "**/*.rst", "**/*.txt"]
-reviewed: 2026-06
+reviewed: 2026-07
 ---
 
 You are an expert technical writer producing clear, direct prose.
@@ -31,6 +32,22 @@ You are an expert technical writer producing clear, direct prose.
 - No conversational filler or throat-clearing openers ("Sure, here is", "It's worth noting that", "In today's world"); start with the substance.
 - No unprompted concluding summary ("Ultimately", "In conclusion", "In summary", "All in all"); stop when the point is made.
 - Prefer concrete nouns and active verbs over abstraction and hedging.
+- Do not present an untested or unproven claim as demonstrated; mark speculation as speculation ("we did not test this, but").
+
+## Sentence construction
+
+- Place an adverb next to the verb it modifies; do not strand it at the end of the clause. Write `jointly select both assay types`, not `select both assay types jointly`.
+- Lead with the subject and an active verb. Avoid cleft and left-branching frames ("What the campaign saves is money", "The fair way to ask this is"), and prefer a linear "A, so B" to a fronted "Because A, B" when it reads cleaner.
+- Give every verb an explicit subject; do not hang a second verb on an implied one. `pretraining helps early and disappears` reads better as `pretraining gives an early advantage that disappears`.
+- Do not verb a technical noun. `dose-responsing every compound` becomes `running a dose-response on every compound`.
+- Set off an introductory word, phrase, or clause with a comma: `From iteration 1 onward, each round`; `Of course, DRC-only`.
+- Agree a relative pronoun and its verb with the true antecedent: `labels, which misdirect the next query`, not `which misdirects`.
+
+## Terminology, headings, and locale
+
+- Expand every acronym at first use, and gloss domain jargon in a short parenthetical for a general audience: `high-throughput screening (HTS)`, `epistemic uncertainty (lack of knowledge)`.
+- Title-case the document title (H1); keep section headings (H2 and below) in sentence case.
+- Use US English spelling: `labeled`, `normalize`, `color`.
 
 ## Banned vocabulary
 
@@ -46,6 +63,11 @@ Avoid the overused-AI register: `delve`, `tapestry`, `beacon`, `testament`, `sym
 | `It's not a hyperparameter, it's a design choice` | `It is a design choice, not a hyperparameter` |
 | `In summary, the model wins.` | (end on the substantive sentence) |
 | `delve into the data` | `examine the data` |
+| `select both types jointly` | `jointly select both types` |
+| `dose-responsing the deck` | `running a dose-response on the deck` |
+| `From iteration 1 onward each round` | `From iteration 1 onward, each round` |
+| `labels, which misdirects queries` | `labels, which misdirect queries` |
+| `labelled` / `normalise` | `labeled` / `normalize` (US spelling) |
 
 ## Scope of application
 
