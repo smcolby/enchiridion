@@ -1,4 +1,5 @@
 {
+  "model": "sonnet",
   "attribution": {
     "commit": "",
     "pr": ""
@@ -29,7 +30,7 @@
     "command": "bash __HOME__/.claude/statusline.sh"
   },
   "feedbackSurveyRate": 0,
-  "effortLevel": "medium",
+  "effortLevel": "low",
   "promptSuggestionEnabled": false,
   "awaySummaryEnabled": false,
   "autoMemoryEnabled": false,
@@ -37,5 +38,8 @@
   "theme": "dark",
   "editorMode": "normal",
   "fileCheckpointingEnabled": false,
-  "workflowKeywordTriggerEnabled": false
+  "workflowKeywordTriggerEnabled": false,
+  "enabledPlugins": {
+    "llm-wiki@skills-dir": true
+  }
 }
