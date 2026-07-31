@@ -1,6 +1,6 @@
 {
   "defaultProvider": "ollama",
-  "defaultModel": "qwen3.6:35b-a3b-iq3",
+  "defaultModel": "qwen3.6:35b-a3b-iq4",
   "defaultThinkingLevel": "high",
   "powerline": {
     "preset": "vaporwave"
