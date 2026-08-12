@@ -64,6 +64,11 @@
                         "medium": null,
                         "xhigh": null
                     }
+                },
+                {
+                    "id": "muse-glimmer-30b-q4",
+                    "contextWindow": 131072,
+                    "reasoning": false
                 }
             ]
         }
