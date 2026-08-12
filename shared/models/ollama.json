@@ -70,12 +70,11 @@
                     "contextWindow": 262144,
                     "reasoning": true,
                     "thinkingLevelMap": {
-                        "off": null,
+                        "off": "off",
                         "minimal": null,
-                        "low": "low",
-                        "medium": "medium",
-                        "high": "high",
-                        "xhigh": "xhigh"
+                        "low": null,
+                        "medium": null,
+                        "high": "high"
                     }
                 }
             ]
