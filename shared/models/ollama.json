@@ -68,7 +68,15 @@
                 {
                     "id": "muse-glimmer-30b-q4",
                     "contextWindow": 262144,
-                    "reasoning": false
+                    "reasoning": true,
+                    "thinkingLevelMap": {
+                        "off": null,
+                        "minimal": null,
+                        "low": "low",
+                        "medium": "medium",
+                        "high": "high",
+                        "xhigh": "xhigh"
+                    }
                 }
             ]
         }
