@@ -18,7 +18,7 @@
                         "minimal": null,
                         "low": null,
                         "medium": null,
-                        "xhigh": null
+                        "high": "high"
                     }
                 },
                 {
@@ -29,7 +29,7 @@
                         "minimal": null,
                         "low": null,
                         "medium": null,
-                        "xhigh": null
+                        "high": "high"
                     }
                 },
                 {
@@ -40,7 +40,7 @@
                         "minimal": null,
                         "low": null,
                         "medium": null,
-                        "xhigh": null
+                        "high": "high"
                     }
                 },
                 {
@@ -51,7 +51,7 @@
                         "minimal": null,
                         "low": null,
                         "medium": null,
-                        "xhigh": null
+                        "high": "high"
                     }
                 },
                 {
@@ -62,19 +62,26 @@
                         "minimal": null,
                         "low": null,
                         "medium": null,
-                        "xhigh": null
+                        "high": "high"
                     }
                 },
                 {
                     "id": "muse-glimmer-30b-q4",
                     "contextWindow": 262144,
                     "reasoning": true,
+                    "compat": {
+                        "thinkingFormat": "chat-template",
+                        "chatTemplateKwargs": {
+                            "reasoning_strength": { "$var": "thinking.effort" }
+                        }
+                    },
                     "thinkingLevelMap": {
-                        "off": "off",
+                        "off": null,
                         "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
+                        "low": "low",
+                        "medium": "medium",
+                        "high": "high",
+                        "xhigh": "xhigh"
                     }
                 }
             ]
