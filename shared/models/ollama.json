@@ -11,17 +11,6 @@
             },
             "models": [
                 {
-                    "id": "qwen3.6:35b-a3b-iq3",
-                    "contextWindow": 262144,
-                    "reasoning": true,
-                    "thinkingLevelMap": {
-                        "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
-                    }
-                },
-                {
                     "id": "qwen3.6:35b-a3b-iq4",
                     "contextWindow": 262144,
                     "reasoning": true,
@@ -35,17 +24,6 @@
                 {
                     "id": "qwen3.6:27b-iq4",
                     "contextWindow": 180224,
-                    "reasoning": true,
-                    "thinkingLevelMap": {
-                        "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
-                    }
-                },
-                {
-                    "id": "qwen3.6:27b-iq3",
-                    "contextWindow": 262144,
                     "reasoning": true,
                     "thinkingLevelMap": {
                         "minimal": null,
