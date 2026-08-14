@@ -44,6 +44,22 @@
                     }
                 },
                 {
+                    "id": "qwen3.8:27b-q4km",
+                    "contextWindow": 262144,
+                    "reasoning": true,
+                    "compat": {
+                        "thinkingFormat": "openai",
+                        "supportsReasoningEffort": true
+                    },
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": null,
+                        "low": "low",
+                        "medium": "medium",
+                        "high": "high"
+                    }
+                },
+                {
                     "id": "muse-glimmer-30b-q4",
                     "contextWindow": 262144,
                     "reasoning": true,
