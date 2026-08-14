@@ -44,7 +44,7 @@
                     }
                 },
                 {
-                    "id": "qwen3.8:27b-q4km",
+                    "id": "qwen3.8:27b-iq4xs",
                     "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
