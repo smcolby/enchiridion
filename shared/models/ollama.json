@@ -45,7 +45,7 @@
                 },
                 {
                     "id": "qwen3.8:27b-iq4xs",
-                    "contextWindow": 262144,
+                    "contextWindow": 200000,
                     "reasoning": true,
                     "compat": {
                         "thinkingFormat": "openai",
