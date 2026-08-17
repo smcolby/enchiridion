@@ -5,44 +5,9 @@
             "api": "openai-completions",
             "apiKey": "ollama",
             "compat": {
-                "supportsDeveloperRole": false,
-                "supportsReasoningEffort": false,
-                "thinkingFormat": "qwen-chat-template"
+                "supportsDeveloperRole": false
             },
             "models": [
-                {
-                    "id": "qwen3.6:35b-a3b-iq4",
-                    "contextWindow": 262144,
-                    "reasoning": true,
-                    "thinkingLevelMap": {
-                        "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
-                    }
-                },
-                {
-                    "id": "qwen3.6:27b-iq4",
-                    "contextWindow": 180224,
-                    "reasoning": true,
-                    "thinkingLevelMap": {
-                        "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
-                    }
-                },
-                {
-                    "id": "ornith:1.0-35b-iq4",
-                    "contextWindow": 262144,
-                    "reasoning": true,
-                    "thinkingLevelMap": {
-                        "minimal": null,
-                        "low": null,
-                        "medium": null,
-                        "high": "high"
-                    }
-                },
                 {
                     "id": "qwen3.8:27b-iq4xs",
                     "contextWindow": 200000,
