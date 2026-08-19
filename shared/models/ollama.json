@@ -10,7 +10,7 @@
             "models": [
                 {
                     "id": "qwen3.8:27b-iq4xs",
-                    "contextWindow": 200000,
+                    "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
                         "thinkingFormat": "openai",
