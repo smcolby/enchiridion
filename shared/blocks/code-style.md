@@ -3,3 +3,4 @@
 - Do not end comments with a period.
 - Comment each meaningful chunk of functionality so that reading the comments alone gives an overview of the function; add why-comments where rationale is not obvious.
 - Update comments and docstrings in the same edit as the code they describe; never reference the current task or change in a comment.
+- Precede a chunk comment with a blank line, unless it is the first line inside a newly indented block (immediately after a `:` that opens an `if`/`for`/`while`/`def`/`class`, etc.), where no blank line is needed.
