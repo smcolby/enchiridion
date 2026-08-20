@@ -73,7 +73,7 @@ Prefer the `catalog-ingest` skill when adopting external content; it dedupes and
 
 **Add or update a playbook:**
 ```bash
-$EDITOR shared/skills/<name>/SKILL.md        # frontmatter: name, description, reviewed
+$EDITOR shared/skills/<name>/SKILL.md        # frontmatter: name, description
 # new skill only: add it to the skills list in tools/harnesses.toml, then
 python tools/bootstrap.py --skill <name>
 ```

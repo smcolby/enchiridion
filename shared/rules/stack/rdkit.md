@@ -9,7 +9,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["rdkit>=2023.09"]
-reviewed: 2026-06
 ---
 
 You are an expert in cheminformatics with RDKit; domain interpretation (potency, SAR, assay data) is governed by the medicinal-chemistry rule.

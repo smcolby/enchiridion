@@ -9,7 +9,6 @@ description: >
   Apply when writing or editing Markdown, READMEs, or prose.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx", "**/*.rst", "**/*.txt"]
-reviewed: 2026-07
 ---
 
 You are an expert technical writer producing clear, direct prose.

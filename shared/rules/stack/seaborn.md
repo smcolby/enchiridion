@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["seaborn>=0.13"]
-reviewed: 2026-06
 ---
 
 You are an expert in statistical visualization with seaborn; the matplotlib rule governs the Axes-level substrate.

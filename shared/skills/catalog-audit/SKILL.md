@@ -5,7 +5,6 @@ description: >
   stack pins, hardening opportunities, promotion/demotion candidates, and
   doctrine budget. Use on a schedule, after a model upgrade, or after a
   major dependency version bump.
-reviewed: 2026-06
 ---
 
 # Catalog Audit
@@ -14,7 +13,7 @@ Semantic staleness review of the catalog (the enchiridion repository; resolve it
 
 ## Passes
 
-1. **Reviewed dates**: list every rule and playbook whose `reviewed:` month is older than the audit interval (default: 6 months). For each, re-check its claims against the pinned stack's current documentation and update `reviewed:` only after an actual re-check.
+1. **Staleness by history**: list every rule and playbook whose last commit is older than the audit interval (default: 6 months; `git log -1 -- <file>` per file, or the `updated` column of `report.py`). For each, re-check its claims against the pinned stack's current documentation; the audit commit is the record that the re-check happened.
 2. **Stack pins vs reality**: compare each rule's `stack:` pins against versions actually in use in active repos (lockfiles, installed tools). Divergence means the rule's advice may be wrong for what is actually running; update the advice and the pin together.
 3. **Anti-hallucination re-validation**: for each banned pattern, confirm it is still the right ban. Yesterday's deprecated API may now be removed entirely (drop the row), and the replacement may have new siblings worth banning (add rows).
 4. **Model-relative redundancy**: rules are diffs against a specific model's default behavior. After a model change, spot-test directives by prompting without the rule; delete directives the model now satisfies unprompted, and note new failure modes as capture candidates.
@@ -26,4 +25,4 @@ Semantic staleness review of the catalog (the enchiridion repository; resolve it
 
 ## Output
 
-A findings list grouped by pass, each with a proposed action (update, delete, capture, promote, demote, reseed) and the file it touches. Apply approved actions, set `reviewed:` on everything actually re-checked, run `python tools/sync.py --rules --apply && python tools/verify.py`, and commit with a summary of what the audit changed and why.
+A findings list grouped by pass, each with a proposed action (update, delete, capture, promote, demote, reseed) and the file it touches. Apply approved actions, run `python tools/sync.py --rules --apply && python tools/verify.py`, and commit with a summary of what the audit re-checked and what it changed.

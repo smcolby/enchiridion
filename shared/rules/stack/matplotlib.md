@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["matplotlib>=3.8"]
-reviewed: 2026-06
 ---
 
 You are an expert in matplotlib's object-oriented API.

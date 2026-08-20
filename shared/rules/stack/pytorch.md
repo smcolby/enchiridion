@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["torch>=2.4"]
-reviewed: 2026-06
 ---
 
 You are an expert in PyTorch 2.x. Training methodology is governed by the machine-learning rule; this rule covers the library surface.

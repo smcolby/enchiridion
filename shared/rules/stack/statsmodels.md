@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["statsmodels>=0.14"]
-reviewed: 2026-06
 ---
 
 You are an expert in statistical modeling with statsmodels.

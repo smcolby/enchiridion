@@ -31,7 +31,7 @@ HARNESSES_DIR = REPO / "harnesses"
 RULE_TIERS = {"always", "scoped", "requested", "invoked"}
 RULE_BODY_MAX_LINES = 500
 FRONTMATTER_TOKEN_BUDGET = 100
-REVIEWED_STALE_MONTHS_DEFAULT = 12
+STALE_MONTHS_DEFAULT = 12
 
 # machine-specific roots; portable forms (~/, $HOME, relative) are fine
 ABS_PATH_RE = re.compile(r"(?<![\w@.-])(?:/Users/|/home/|[A-Za-z]:\\)")
@@ -118,19 +118,39 @@ def lint_description(rel, desc: str) -> list[str]:
     return warnings
 
 
-def reviewed_months_ago(value) -> int | None:
-    """Return whole months since a reviewed: stamp, or None if unparseable."""
+def git_last_commit(rel: Path) -> int | None:
+    """Return epoch seconds of the file's last commit, or None if it has none."""
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "log", "-1", "--format=%ct", "--", str(rel)],
+        capture_output=True,
+        text=True,
+        cwd=REPO,
+    )
+    stamp = result.stdout.strip()
+    return int(stamp) if stamp.isdigit() else None
+
+
+def git_age_months(rel: Path) -> int | None:
+    """Return whole months since the file's last commit, or None if unknown."""
     import datetime
 
-    if isinstance(value, datetime.date):
-        year, month = value.year, value.month
-    else:
-        m = re.match(r"^(\d{4})-(\d{2})", str(value))
-        if not m:
-            return None
-        year, month = int(m.group(1)), int(m.group(2))
+    last = git_last_commit(rel)
+    if last is None:
+        return None
+    then = datetime.datetime.fromtimestamp(last).date()
     today = datetime.date.today()
-    return (today.year - year) * 12 + (today.month - month)
+    return (today.year - then.year) * 12 + (today.month - then.month)
+
+
+def stale_warning(rel: Path) -> str | None:
+    """Return a staleness warning for a file untouched past the audit interval."""
+    stale_after = registry.load().get("stale_months", STALE_MONTHS_DEFAULT)
+    age = git_age_months(rel)
+    if age is None or age <= stale_after:
+        return None
+    return f"{rel}: not updated in {age} months (stale after {stale_after}); run catalog-audit"
 
 
 def lint_common(
@@ -139,9 +159,9 @@ def lint_common(
     """Run the authoring-standards lints shared by rules and skills.
 
     Returns (errors, warnings): hygiene violations are errors, quality
-    heuristics and staleness are warnings. description_lints is off for the
-    generated router index, whose description enumerates rule names as
-    activation keywords and grows with the catalog by design.
+    heuristics are warnings. description_lints is off for the generated
+    router index, whose description enumerates rule names as activation
+    keywords and grows with the catalog by design.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -155,13 +175,6 @@ def lint_common(
             warnings.append(
                 f"{rel}: description ~{desc_tokens} tokens"
                 f" (budget {FRONTMATTER_TOKEN_BUDGET}); trim to what matching needs"
-            )
-    if fm.get("reviewed"):
-        stale_after = registry.load().get("reviewed_stale_months", REVIEWED_STALE_MONTHS_DEFAULT)
-        age = reviewed_months_ago(fm["reviewed"])
-        if age is not None and age > stale_after:
-            warnings.append(
-                f"{rel}: reviewed {age} months ago (stale after {stale_after}); run catalog-audit"
             )
     return errors, warnings
 
@@ -247,7 +260,7 @@ def load_rules() -> list[tuple[Path, dict, str]]:
             errors.append(f"{rel}: {err or 'frontmatter is not a mapping'}")
             continue
         body = text[m.end() :].lstrip("\n")
-        for field in ("name", "description", "tier", "reviewed"):
+        for field in ("name", "description", "tier"):
             if not fm.get(field):
                 errors.append(f"{rel}: missing required field '{field}'")
         tier = fm.get("tier")
@@ -263,6 +276,9 @@ def load_rules() -> list[tuple[Path, dict, str]]:
         lint_errors, lint_warnings = lint_common(rel, fm, text)
         errors.extend(lint_errors)
         warnings.extend(lint_warnings)
+        stale = stale_warning(rel)
+        if stale:
+            warnings.append(stale)
         name = fm.get("name")
         if name:
             if name in seen:
@@ -416,9 +432,6 @@ def check_skills() -> int:
                 errors.append(f"{rel}: missing required field '{field}'")
         if fm.get("name") and fm["name"] != skill_md.parent.name:
             errors.append(f"{rel}: name '{fm['name']}' != directory '{skill_md.parent.name}'")
-        # the generated router's freshness is checked mechanically by check_rules
-        if skill_md != ROUTER_SKILL and not fm.get("reviewed"):
-            errors.append(f"{rel}: missing 'reviewed' (required for playbooks)")
         body = text[m.end() :]
         if len(body.splitlines()) > RULE_BODY_MAX_LINES:
             errors.append(f"{rel}: body exceeds {RULE_BODY_MAX_LINES} lines")
@@ -427,6 +440,11 @@ def check_skills() -> int:
         )
         errors.extend(lint_errors)
         warnings.extend(lint_warnings)
+        # the generated router's staleness is covered by the rules it derives from
+        if skill_md != ROUTER_SKILL:
+            stale = stale_warning(rel)
+            if stale:
+                warnings.append(stale)
     for w in warnings:
         print(f"  WARN  {w}")
     if errors:

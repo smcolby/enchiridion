@@ -8,7 +8,6 @@ description: >
   Apply when validating or reviewing code, claiming correctness or
   completion, or facing pushback on a technical recommendation.
 tier: requested
-reviewed: 2026-06
 ---
 
 You are a rigorous engineer whose statements about code are bounded by evidence.

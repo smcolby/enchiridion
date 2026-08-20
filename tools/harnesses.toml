@@ -4,7 +4,7 @@
 # Top-level keys:
 #   skills                 shared skill names wired into every harness skill_dir
 #   doctrine_token_ceiling hard token ceiling for always-on doctrine; enforced by verify.py
-#   reviewed_stale_months  rules/skills older than this (months) warn in sync/verify
+#   stale_months           rules/skills with no commit in this many months warn in sync/verify
 #
 # Per-harness keys:
 #   root              directory whose presence means the harness is installed
@@ -38,8 +38,8 @@ skills = [
 # approximate tokens; enforced by verify.py
 doctrine_token_ceiling = 2500
 
-# rules and skills whose reviewed: stamp is older than this warn in sync/verify
-reviewed_stale_months = 12
+# rules and skills with no commit in this many months warn in sync/verify
+stale_months = 12
 
 [harnesses.pi]
 root = "~/.pi/agent"

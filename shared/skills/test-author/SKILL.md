@@ -5,7 +5,6 @@ description: >
   contract, enumerate behaviors before writing code, choose example-based
   vs property-based strategies, and prove regression tests fail before the
   fix. Use when writing new tests, adding coverage, or reproducing a bug.
-reviewed: 2026-06
 ---
 
 # Test Author

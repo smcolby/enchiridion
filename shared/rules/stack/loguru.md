@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["loguru>=0.7"]
-reviewed: 2026-06
 ---
 
 You are an expert in application logging with loguru. In repos that declare loguru, this rule overrides the lang/python directive to use stdlib `logging` with `__name__` loggers; the rest of that rule (logging over print, boundaries, levels) stands.

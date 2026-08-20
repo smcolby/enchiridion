@@ -7,7 +7,6 @@ description: >
   contains LaTeX math, inline code, fenced blocks, or backslash escapes.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx"]
-reviewed: 2026-07
 ---
 
 You are an expert at authoring Markdown that survives machine editing without corrupting its markup.

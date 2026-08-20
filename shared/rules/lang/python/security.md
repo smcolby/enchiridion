@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["python>=3.11"]
-reviewed: 2026-06
 ---
 
 You are an expert in writing security-conscious Python.

@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["lightning>=2.0"]
-reviewed: 2026-06
 ---
 
 You are an expert in Lightning 2.x on top of PyTorch; the pytorch rule governs tensor-level code.

@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["zarr>=3.0"]
-reviewed: 2026-06
 ---
 
 You are an expert in chunked array storage with zarr-python 3.

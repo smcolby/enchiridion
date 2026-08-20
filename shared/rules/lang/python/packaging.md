@@ -10,7 +10,6 @@ description: >
 tier: scoped
 scope: ["**/pyproject.toml", "**/uv.lock", "**/requirements*.txt", "**/setup.py", "**/setup.cfg", "**/environment.yml", "**/pixi.toml"]
 stack: ["uv>=0.5"]
-reviewed: 2026-06
 ---
 
 You are an expert in modern Python packaging and project structure.

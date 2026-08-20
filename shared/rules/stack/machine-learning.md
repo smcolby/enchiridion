@@ -9,7 +9,6 @@ description: >
   training or evaluation.
 tier: requested
 stack: ["torch>=2"]
-reviewed: 2026-06
 ---
 
 You are an expert in machine learning methodology across the lifecycle: data handling, training dynamics, evaluation, and deployment.

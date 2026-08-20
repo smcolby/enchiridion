@@ -9,6 +9,7 @@ Usage:
   python tools/report.py
 """
 
+import datetime
 import difflib
 import re
 import sys
@@ -198,11 +199,15 @@ def inspect_rules(errors: list, warnings: list):
     table.add_column("tier")
     table.add_column("scope")
     table.add_column("stack")
-    table.add_column("reviewed")
-    for _path, fm, _body in rules:
+    table.add_column("updated")
+    for path, fm, _body in rules:
         scope = ", ".join(fm.get("scope", [])) or "[dim]—[/dim]"
         stack = ", ".join(fm.get("stack", [])) or "[dim]—[/dim]"
-        table.add_row(fm["name"], fm["tier"], scope, stack, str(fm["reviewed"]))
+        last = sync.git_last_commit(path)
+        updated = (
+            datetime.date.fromtimestamp(last).isoformat() if last is not None else "[dim]—[/dim]"
+        )
+        table.add_row(fm["name"], fm["tier"], scope, stack, updated)
     console.print(table)
 
     expected = sync.build_router(rules)

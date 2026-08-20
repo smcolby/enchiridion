@@ -7,7 +7,6 @@ description: >
   or cellular assay data: Ki/Kd, IC50/EC50, enzyme kinetics, inhibition or
   binding measurements, cell-based readouts.
 tier: requested
-reviewed: 2026-06
 ---
 
 You are an expert in molecular and cellular biology, biochemical assays, and the interpretation of binding and inhibition data.

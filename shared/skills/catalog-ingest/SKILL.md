@@ -5,7 +5,6 @@ description: >
   style guides) into the enchiridion catalog: classify, normalize, harden,
   dedupe, pin, and record provenance. Use when asked to add a source,
   rule set, or best-practices document to the catalog.
-reviewed: 2026-06
 ---
 
 # Catalog Ingest
@@ -22,7 +21,7 @@ Apply per candidate directive or artifact, not per source document:
    - Multi-step procedure → playbook (`shared/skills/`).
    - Stance for delegated work → agent (`shared/agents/`).
    - Repo-creation material → seed (`shared/seeds/`).
-2. **Strip and normalize**: remove harness packaging (cursorrules headers, vendor framing); rewrite to the canonical schema and the catalog's voice. For rules: frontmatter `name`, `description` (third person, what + when, matchable keywords), `tier`, `scope`, `stack`, `reviewed`.
+2. **Strip and normalize**: remove harness packaging (cursorrules headers, vendor framing); rewrite to the canonical schema and the catalog's voice. For rules: frontmatter `name`, `description` (third person, what + when, matchable keywords), `tier`, `scope`, `stack`.
 3. **Harden** (enforcement-pairing triage):
    - Classify each directive: machine-checkable now, partially checkable, judgment-only.
    - Map checkable ones to a concrete gate (ruff rule code, banned-api entry, pyright setting, pre-commit hook) and put the gate in the seeds' tool configs, never in rule prose.
@@ -30,7 +29,7 @@ Apply per candidate directive or artifact, not per source document:
    - Partially checkable directives keep prose for exactly the uncovered residue.
 4. **Dedupe and reconcile**: anything doctrine or an existing rule already says is dropped. Anything that contradicts the catalog forces a decision now (rewrite one side); never let contradictions coexist.
 5. **Filter against default behavior**: drop every directive that merely restates what the current model does unprompted. If unsure, test with a quick generation. Most community content dies at this step; that is the step working.
-6. **Pin and stamp**: version-pin every stack-dependent claim in `stack:`; set `reviewed:` to the current month; record the source URL in the commit message.
+6. **Pin and record**: version-pin every stack-dependent claim in `stack:`; record the source URL in the commit message, which stamps the review.
 
 ## Close out
 

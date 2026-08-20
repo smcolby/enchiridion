@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["numpy>=2.0", "scipy>=1.12"]
-reviewed: 2026-06
 ---
 
 You are an expert in numerical computing with NumPy 2.x and SciPy.

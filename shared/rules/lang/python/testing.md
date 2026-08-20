@@ -7,7 +7,6 @@ description: >
 tier: scoped
 scope: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"]
 stack: ["pytest>=8", "hypothesis>=6"]
-reviewed: 2026-06
 ---
 
 You are an expert in Python test architecture with pytest.

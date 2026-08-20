@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["plotly>=5.18"]
-reviewed: 2026-06
 ---
 
 You are an expert in plotly figure construction.

@@ -8,7 +8,6 @@ description: >
   objects, fingerprints, molecular descriptors, QSAR datasets.
 tier: requested
 stack: ["rdkit>=2024.03"]
-reviewed: 2026-06
 ---
 
 You are an expert in cheminformatics, QSAR modeling, and molecular representations.

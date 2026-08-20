@@ -140,7 +140,6 @@ description: >
 tier: scoped
 scope: ["**/test_*.py", "**/tests/**", "**/conftest.py"]
 stack: ["pytest>=8"]
-reviewed: 2026-06
 ---
 
 (rule body)
@@ -153,7 +152,6 @@ Field semantics:
 - `tier` — one of the four activation tiers.
 - `scope` — glob patterns, used by harnesses with native scoped rules and ignored (in favor of `description`) elsewhere.
 - `stack` — explicit version pins for every framework or library the rule's advice depends on. A rule that says "use lifespan context managers" is correct for one FastAPI version range and wrong outside it; the pin makes the dependency auditable.
-- `reviewed` — date of last human/agent audit against the pinned stack. Stale rules are worse than no rules: they confidently assert outdated APIs.
 
 ### Rule anatomy
 
@@ -251,7 +249,7 @@ Adopted from the VoltAgent quality criteria and extended; these apply to rules a
 | Hardened where possible | No prose directive that current tooling can enforce; checkable directives live in tool config with at most a one-line pointer in the rule (see Enforcement pairing) |
 | Checkable directives | Each directive is falsifiable against a concrete diff |
 | Version pins explicit | Any stack-dependent advice cites the version range it is true for |
-| Reviewed date present | Every rule and playbook carries `reviewed:`; audit (see Operations) flags stale ones |
+| Freshness from history | No hand-kept review stamp; staleness is read from last-commit dates, and the audit commit records a re-check |
 | Diff against default behavior | No directive that restates what the model does unprompted. Model-relative: re-evaluated when the model changes |
 
 These standards are the rule-layer analogue of cross-harness-config-pattern.md's "blocks are universal or they are not blocks": invariants simple enough to verify mechanically, strict enough to keep the catalog healthy.
@@ -353,7 +351,7 @@ Adopt an external artifact (community rule, vendor skill, blog post's checklist)
 2. Strip harness packaging; normalize to the canonical schema.
 3. Harden: apply the enforcement-pairing triage; any directive that can be a gate enters tool config, never the rule body.
 4. Dedupe against doctrine and existing rules: anything the catalog already says is dropped; anything that *contradicts* the catalog forces a decision, never silent coexistence.
-5. Pin versions for every stack-dependent claim; set `reviewed:` to today.
+5. Pin versions for every stack-dependent claim.
 6. Record provenance (source URL) in the frontmatter or commit message.
 
 Ingest is also the de-bloat filter: most community rules fail the "diff against default behavior" standard for current frontier models, and ingest is where that content dies instead of entering the catalog.
@@ -396,7 +394,7 @@ Mechanical lint of the catalog, runnable in pre-commit alongside the congruence 
 
 Periodic (scheduled or prompted) review for semantic staleness, which verify() cannot catch:
 
-- Every rule whose `reviewed:` date exceeds the audit interval gets re-checked against its pinned stack's current state.
+- Every rule whose last commit predates the audit interval gets re-checked against its pinned stack's current state; the audit commit is the re-check record, and a no-change re-check leaves the staleness warning running until content moves.
 - Stack pins compared against what is actually installed in active repos; divergence flags the rule.
 - Anti-hallucination lists re-validated: yesterday's banned deprecated API may be today's removed one (drop it) or may have new siblings (add them).
 - Provenance stamps in seeded repos compared against the catalog; long-stale stamps flag a reseed.
@@ -443,7 +441,6 @@ description: >
 tier: scoped
 scope: ["**/test_*.py", "**/*_test.py", "**/tests/**", "**/conftest.py"]
 stack: ["pytest>=8", "hypothesis>=6"]
-reviewed: 2026-06
 ---
 
 You are an expert in Python test architecture with pytest.

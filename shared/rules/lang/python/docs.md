@@ -7,7 +7,6 @@ description: >
   documentation in Python projects.
 tier: scoped
 scope: ["**/*.py", "**/README.md", "**/docs/**"]
-reviewed: 2026-06
 ---
 
 You are an expert in Python API documentation using the NumPy docstring standard.

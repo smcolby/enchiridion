@@ -5,7 +5,6 @@ description: >
   and fallback structure when none exists. Apply when drafting or writing a
   pull request body or description.
 tier: requested
-reviewed: 2026-06
 ---
 
 You are authoring a pull request body for human reviewers.

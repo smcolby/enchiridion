@@ -9,7 +9,6 @@ description: >
   potency, assays, screening, or QSAR models.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx", "**/*.rst", "**/*.txt"]
-reviewed: 2026-07
 ---
 
 You are an expert writing about bioactivity, assays, and QSAR modeling for a technical audience.

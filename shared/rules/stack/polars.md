@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["polars>=1.0"]
-reviewed: 2026-06
 ---
 
 You are an expert in data manipulation with polars 1.x.

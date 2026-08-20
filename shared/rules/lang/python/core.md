@@ -7,7 +7,6 @@ description: >
 tier: scoped
 scope: ["**/*.py"]
 stack: ["python>=3.11"]
-reviewed: 2026-06
 ---
 
 You are an expert in modern Python (3.11+) and idiomatic, production-quality code.

@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["pandas>=2.2"]
-reviewed: 2026-06
 ---
 
 You are an expert in data manipulation with pandas 2.x.

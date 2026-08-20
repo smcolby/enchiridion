@@ -8,7 +8,6 @@ description: >
   values, dose-response curves, SAR tables, compound property predictions.
 tier: requested
 stack: ["rdkit>=2024.03"]
-reviewed: 2026-06
 ---
 
 You are an expert in medicinal chemistry, structure-activity relationships, and bioactivity data interpretation.

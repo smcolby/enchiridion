@@ -8,7 +8,6 @@ description: >
 tier: requested
 scope: ["**/*.py"]
 stack: ["scikit-learn>=1.4"]
-reviewed: 2026-06
 ---
 
 You are an expert in the scikit-learn estimator API. Methodology (leakage, evaluation, splits) is governed by the machine-learning rule; this rule covers the library surface.

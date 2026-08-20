@@ -6,7 +6,6 @@ description: >
   working inside an llm-wiki project directory — for ingest ("process this
   source", "add this to the wiki"), query ("what does the wiki say about X"),
   or maintenance ("lint the wiki", "find orphan pages").
-reviewed: 2026-06
 ---
 
 # Wiki Ops
