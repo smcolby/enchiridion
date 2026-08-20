@@ -1,12 +1,13 @@
 ---
 name: machine-learning
 description: >
-  Machine learning methodology across the lifecycle: data leakage,
-  training dynamics, evaluation discipline, train/serve consistency, and
-  reproducibility. Apply when writing or reviewing data splits, training
-  loops, loss functions, model evaluation, or inference and serving code.
-tier: scoped
-scope: ["**/train*.py", "**/trainer/**", "**/*trainer*.py", "**/split/**", "**/*split*.py", "**/eval/**", "**/*eval*.py", "**/*metric*.py", "**/loss*.py", "**/features/**", "**/featur*.py", "**/architecture/**", "**/inference/**", "**/*inference*.py", "**/dataset*.py", "**/dataloader*.py", "**/active_learning/**"]
+  Machine learning methodology: data leakage, training dynamics,
+  evaluation discipline, train/serve consistency, reproducibility. Apply
+  when code trains, evaluates, or serves statistical or neural models:
+  training loops, loss functions, model selection, inference paths. Not
+  for model-free statistics, plain data wrangling, or non-model uses of
+  training or evaluation.
+tier: requested
 stack: ["torch>=2"]
 reviewed: 2026-06
 ---

@@ -3,11 +3,10 @@ name: chemoinformatics
 description: >
   Molecular data pipeline conventions: SMILES sanitization and
   canonicalization, stereochemistry preservation, scaffold-aware splitting,
-  target plausibility validation, and reproducible featurization. Apply
-  when writing or reviewing code that handles molecules, SMILES,
-  fingerprints, descriptors, or QSAR datasets.
-tier: scoped
-scope: ["**/featur*.py", "**/features/**", "**/*mol*.py", "**/*smiles*.py", "**/*chem*.py", "**/descriptor*.py", "**/fingerprint*.py", "**/*qsar*.py", "**/standardiz*.py", "**/sanitiz*.py", "**/canonical*.py", "**/split/**", "**/*split*.py", "**/*dataset*.py"]
+  plausibility validation, and reproducible featurization. Apply when code
+  or data contains molecular structures: SMILES or InChI strings, RDKit
+  objects, fingerprints, molecular descriptors, QSAR datasets.
+tier: requested
 stack: ["rdkit>=2024.03"]
 reviewed: 2026-06
 ---

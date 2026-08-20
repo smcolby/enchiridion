@@ -1,6 +1,6 @@
 ---
 name: Chemoinformatician
-description: Strict, adversarial domain expert in cheminformatics, QSAR, and molecular representations.
+description: 'Strict, adversarial domain expert in cheminformatics code: SMILES handling, molecular featurization, scaffold-aware splitting, QSAR pipelines. Use only when code or data involves molecular structures.'
 tools: Read, Edit, Bash, Glob, Grep, Write
 ---
 

@@ -3,12 +3,10 @@ name: medicinal-chemistry
 description: >
   Medicinal chemistry and SAR data conventions: potency units and log
   transforms, censored assay values, cross-assay comparability, structural
-  alerts and drug-likeness as guidelines, and stereochemistry-aware
-  interpretation. Apply when writing or reviewing code that handles
-  bioactivity data, potency values, SAR tables, or compound property
-  predictions.
-tier: scoped
-scope: ["**/featur*.py", "**/features/**", "**/transform*.py", "**/transforms/**", "**/*mol*.py", "**/*smiles*.py", "**/*chem*.py", "**/descriptor*.py", "**/*compound*.py", "**/*potency*.py", "**/*assay*.py", "**/*sar*.py"]
+  alerts, drug-likeness as guidelines, stereo-aware interpretation. Apply
+  when work interprets or manipulates bioactivity or SAR data: IC50/EC50/Ki
+  values, dose-response curves, SAR tables, compound property predictions.
+tier: requested
 stack: ["rdkit>=2024.03"]
 reviewed: 2026-06
 ---

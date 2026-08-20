@@ -1,14 +1,12 @@
 ---
 name: biology
 description: >
-  Experimental biology and assay interpretation: binding affinity versus
-  potency versus kinetics, inhibition mechanism, enzyme kinetics,
-  dose-response, cellular target engagement, reactivity artifacts, and
-  assay controls. Apply when writing or reviewing code or analyses that
-  handle binding, inhibition, reactivity, dose-response, enzyme-kinetics,
-  or cell-based assay data.
-tier: scoped
-scope: ["**/*assay*.py", "**/*potency*.py", "**/*ic50*.py", "**/*dose*.py", "**/*response*.py", "**/*kinetic*.py", "**/*binding*.py", "**/*inhibit*.py", "**/*activity*.py", "**/*affinity*.py"]
+  Experimental biology and assay interpretation: affinity versus potency
+  versus kinetics, inhibition mechanism, dose-response, target engagement,
+  reactivity artifacts, assay controls. Apply when work handles biochemical
+  or cellular assay data: Ki/Kd, IC50/EC50, enzyme kinetics, inhibition or
+  binding measurements, cell-based readouts.
+tier: requested
 reviewed: 2026-06
 ---
 

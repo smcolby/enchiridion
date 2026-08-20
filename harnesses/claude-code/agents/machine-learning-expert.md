@@ -1,6 +1,6 @@
 ---
 name: Machine Learning Expert
-description: Strict, adversarial domain expert in machine learning methodology across the lifecycle, from data and training through evaluation and deployment.
+description: 'Strict, adversarial domain expert in machine learning methodology: data leakage, evaluation rigor, train/serve consistency, reproducibility. Use only when reviewing model training, evaluation, or serving code.'
 tools: Read, Edit, Bash, Glob, Grep, Write
 ---
 

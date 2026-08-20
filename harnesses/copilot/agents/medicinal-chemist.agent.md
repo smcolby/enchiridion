@@ -1,6 +1,6 @@
 ---
 name: Medicinal Chemist
-description: Strict, adversarial domain expert in structure-activity relationships and bioactivity data interpretation.
+description: 'Strict, adversarial domain expert in SAR and bioactivity data interpretation: potency units, censored values, cross-assay comparability, drug-likeness. Use only when work involves IC50/EC50/Ki values, SAR tables, or compound properties.'
 model: claude-sonnet-4-6
 tools:
 - read
