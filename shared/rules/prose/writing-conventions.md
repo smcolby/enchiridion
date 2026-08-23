@@ -1,12 +1,12 @@
 ---
 name: writing-conventions
 description: >
-  Prose conventions for Markdown and authored text: punctuation
-  (no em-dashes, en-dashes, sequential hyphens), sentence construction
-  (adverb placement, subject-first phrasing, no cleft frames), grammar
-  (introductory comma, relative-pronoun agreement), acronym and jargon
-  glossing, heading case, US spelling, no filler, banned vocabulary.
-  Apply when writing or editing Markdown, READMEs, or prose.
+  Prose conventions for Markdown and authored text: punctuation (em-dashes,
+  colons, semicolons), claims and evidence (concessive pivots, verbless scale
+  enumerations, colon-as-evidence, unquantified intensifiers), sentence
+  construction (adverbs, cleft frames, commas, pronoun agreement), acronyms,
+  heading case, US spelling, filler, banned vocabulary. Apply when writing or
+  editing Markdown or prose.
 tier: scoped
 scope: ["**/*.md", "**/*.mdx", "**/*.rst", "**/*.txt"]
 ---
@@ -34,7 +34,17 @@ You are an expert technical writer producing clear, direct prose.
 - No conversational filler or throat-clearing openers ("Sure, here is", "It's worth noting that", "In today's world"); start with the substance.
 - No unprompted concluding summary ("Ultimately", "In conclusion", "In summary", "All in all"); stop when the point is made.
 - Prefer concrete nouns and active verbs over abstraction and hedging.
+
+## Claims and evidence
+
+Each directive below names a construction that supplies rhetorical form where a
+measurement belongs. Match on the quoted phrasing, not on the intent.
+
 - Do not present an untested or unproven claim as demonstrated; mark speculation as speculation ("we did not test this, but").
+- Never use the concessive pivot ("Every model builds the pocket well; what separates them is where the ligand ends up", "All of them handle X; the difference is Y"); it restates one claim as two and forces a graded result into a solved/unsolved binary. Report the finding once, with its measurement.
+- Never present scale as a verbless noun pile ("Five modelling approaches, nine ADME endpoints, 25 replicate models each, all scored on the same held-out test set"); stacked counts and a trailing "all scored on..." substitute the size of an experiment for its result. Attach the counts to a finding, or leave the inventory in a methods section, table, or caption.
+- Never let a colon stand in for evidence ("The spread matters as much as the centre: several endpoints overlap heavily"); a vague quantifier does not support an evaluative claim. Name the statistic, the count, and the size, or cut the claim.
+- Do not use unquantified quantifiers or intensifiers in a result: `several`, `many`, `most`, `heavily`, `substantially`, `dramatically`, `significantly` (unless reporting a real significance test with its threshold). Give the number.
 
 ## Sentence construction
 
@@ -63,6 +73,12 @@ Avoid the overused-AI register: `delve`, `tapestry`, `beacon`, `testament`, `sym
 | `cost-aware acquisition – the core idea –` | `cost-aware acquisition (the core idea)` |
 | `range 5–10` / `5--10` | `5-10` or `5 to 10` |
 | `It's not a hyperparameter, it's a design choice` | `It is a design choice, not a hyperparameter` |
+| `Every model builds the pocket well; what separates them is where the ligand ends up` | `Pocket RMSD is under 1 A for all five models; ligand RMSD ranges from 0.8 to 4.2 A` |
+| `All of them parse the file; the difference is how they handle errors` | `All three parsers accept the file, and only lxml raises on a malformed tag` |
+| `Five modelling approaches, nine ADME endpoints, 25 replicate models each, all scored on the same held-out test set` | `Across five approaches and nine endpoints (25 replicates each), rank order was stable for seven endpoints and inverted for solubility and hERG` |
+| `Three solvents, four temperatures, 200 runs, one unified pipeline` | `Across three solvents and four temperatures (200 runs), yield tracked temperature and was flat in solvent` |
+| `The spread matters as much as the centre: several endpoints overlap heavily` | `For 4 of 9 endpoints, the 95% intervals of the top two models overlap by more than half their width, so the median ranking does not separate them` |
+| `Data quality matters more than model choice: many datasets are noisy` | `Raising label noise from 5% to 20% costs 0.08 AUC; switching from random forest to XGBoost gains 0.01` |
 | `In summary, the model wins.` | (end on the substantive sentence) |
 | `delve into the data` | `examine the data` |
 | `select both types jointly` | `jointly select both types` |
