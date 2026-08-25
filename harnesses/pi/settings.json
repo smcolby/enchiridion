@@ -2,6 +2,11 @@
   "defaultProvider": "ollama",
   "defaultModel": "qwen3.8:27b-iq4xs",
   "defaultThinkingLevel": "xhigh",
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 65536,
+    "keepRecentTokens": 20000
+  },
   "powerline": {
     "preset": "vaporwave"
   },
