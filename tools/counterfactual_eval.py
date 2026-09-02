@@ -1361,11 +1361,15 @@ def _provenance_lines(run_dir: Path) -> list[str]:
         f"{key}={config.get(key)}"
         for key in ("temperature", "top_p", "num_ctx", "num_predict", "think")
     )
+    commits = manifest.get("repository_commits")
+    if not isinstance(commits, list):
+        legacy_commit = manifest.get("repository_commit")
+        commits = [legacy_commit] if isinstance(legacy_commit, str) else []
     return [
         "",
         "## Provenance",
         "",
-        f"- Repository commits: {', '.join(manifest.get('repository_commits', []))}",
+        f"- Repository commits: {', '.join(commits)}",
         f"- Model: `{config.get('model')}`",
         f"- Model digest: `{server.get('model_digest')}`",
         f"- Ollama: `{server.get('ollama_version')}`",

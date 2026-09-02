@@ -261,8 +261,12 @@ def test_manifest_merge_upgrades_legacy_case_defaults(tmp_path: Path) -> None:
     manifest = json.loads(manifest_path.read_text())
     for field in ("mode", "treatment_arm", "control_arm", "treatment_hash"):
         manifest["cases"][0].pop(field)
+    manifest.pop("repository_commits")
     manifest_path.write_text(json.dumps(manifest))
 
+    assert f"- Repository commits: {manifest['repository_commit']}" in evaluation._provenance_lines(
+        tmp_path
+    )
     evaluation._write_manifest(tmp_path, config, metadata, prompts, {case.id: case}, (101,))
 
     updated = json.loads(manifest_path.read_text())
