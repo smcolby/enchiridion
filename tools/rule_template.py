@@ -454,6 +454,65 @@ def load_inventory() -> tuple[ArtifactInventory, ...]:
     return tuple(artifacts)
 
 
+def render_rule_treatment(
+    artifact: ArtifactInventory, omitted_item_ids: tuple[str, ...] = ()
+) -> str:
+    """Render one canonical rule body with selected source items omitted."""
+    if artifact.artifact_type != "rule":
+        raise ValueError(f"cannot render non-rule artifact '{artifact.path}'")
+    item_by_id = {item.id: item for item in artifact.items}
+    unknown = sorted(set(omitted_item_ids) - set(item_by_id))
+    if unknown:
+        raise ValueError(f"unknown source items for '{artifact.path}': {', '.join(unknown)}")
+
+    # Mark exact source lines for atomic omissions
+    omitted = set(omitted_item_ids)
+    removed_lines = {
+        line_number
+        for item_id in omitted
+        for line_number in range(
+            item_by_id[item_id].line_start,
+            item_by_id[item_id].line_end + 1,
+        )
+    }
+    path = REPO / artifact.path
+    raw = path.read_text()
+    frontmatter = FRONTMATTER_RE.match(raw)
+    if frontmatter is None:
+        raise ValueError(f"rule has no frontmatter: {artifact.path}")
+    lines = raw.splitlines()
+    body_start = raw[: frontmatter.end()].count("\n")
+
+    # Remove headings and structural table lines when a whole section becomes empty
+    section_items: dict[str, set[str]] = {}
+    for item in artifact.items:
+        if item.section == "role":
+            continue
+        section_items.setdefault(item.section, set()).add(item.id)
+    headings = [
+        (index, match.group("title"))
+        for index, line in enumerate(lines)
+        if (match := HEADING_RE.match(line)) and len(match.group("marks")) == 2
+    ]
+    for heading_index, (line_index, title) in enumerate(headings):
+        item_ids = section_items.get(title, set())
+        if not item_ids or not item_ids.issubset(omitted):
+            continue
+        end_index = (
+            headings[heading_index + 1][0] if heading_index + 1 < len(headings) else len(lines)
+        )
+        removed_lines.update(range(line_index + 1, end_index + 1))
+
+    # Keep canonical wording and Markdown unchanged outside omitted line ranges
+    rendered_lines = [
+        line
+        for line_number, line in enumerate(lines[body_start:], start=body_start + 1)
+        if line_number not in removed_lines
+    ]
+    rendered = "\n".join(rendered_lines).strip()
+    return re.sub(r"\n{3,}", "\n\n", rendered)
+
+
 def validate_inventory(inventory: tuple[ArtifactInventory, ...]) -> list[str]:
     """Return structural and global-identity errors for a parsed inventory."""
     errors = [f"{artifact.path}: {error}" for artifact in inventory for error in artifact.errors]

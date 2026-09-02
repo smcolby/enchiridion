@@ -69,6 +69,63 @@ def test_content_identity_is_independent_of_source_order() -> None:
     assert first == second
 
 
+def test_full_rule_rendering_uses_body_without_routing_frontmatter() -> None:
+    inventory = template.load_inventory()
+    artifact = next(
+        item for item in inventory if item.path == "shared/rules/prose/writing-conventions.md"
+    )
+
+    rendered = template.render_rule_treatment(artifact)
+
+    assert not rendered.startswith("---")
+    assert rendered.startswith("You are an expert technical writer")
+    assert "## Principles" in rendered
+    assert "## Scope of application" in rendered
+
+
+def test_rule_rendering_omits_one_atomic_directive() -> None:
+    inventory = template.load_inventory()
+    artifact = next(
+        item for item in inventory if item.path == "shared/rules/prose/writing-conventions.md"
+    )
+    omitted_id = "writing-conventions.rhetoric-and-structure.never-use-the-it-s-not-x-it-s-ea68a7b2"
+    omitted_text = next(item.text for item in artifact.items if item.id == omitted_id)
+
+    rendered = template.render_rule_treatment(artifact, (omitted_id,))
+
+    assert omitted_text not in " ".join(rendered.split())
+    assert "No conversational filler or throat-clearing openers" in rendered
+
+
+def test_rule_rendering_preserves_table_after_one_example_omission() -> None:
+    inventory = template.load_inventory()
+    artifact = next(
+        item for item in inventory if item.path == "shared/rules/prose/writing-conventions.md"
+    )
+    omitted_id = (
+        "writing-conventions.anti-hallucination.it-s-not-a-hyperparameter-it-s-a-design-c2cbb66c"
+    )
+
+    rendered = template.render_rule_treatment(artifact, (omitted_id,))
+
+    assert "| Banned | Correct |" in rendered
+    assert "It's not a hyperparameter, it's a design choice" not in rendered
+    assert "In summary, the model wins." in rendered
+
+
+def test_rule_rendering_removes_section_when_all_examples_are_omitted() -> None:
+    inventory = template.load_inventory()
+    artifact = next(
+        item for item in inventory if item.path == "shared/rules/prose/writing-conventions.md"
+    )
+    omitted_ids = tuple(item.id for item in artifact.items if item.section == "Anti-hallucination")
+
+    rendered = template.render_rule_treatment(artifact, omitted_ids)
+
+    assert "## Anti-hallucination" not in rendered
+    assert "## Scope of application" in rendered
+
+
 def test_generated_audit_contains_every_candidate_treatment(tmp_path: Path) -> None:
     inventory = template.load_inventory()
     errors = template.validate_inventory(inventory)

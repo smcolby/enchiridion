@@ -27,6 +27,15 @@ hash. Treatments are read from the parsed source item at runtime. A source edit
 changes the identifier, makes its evaluator binding stale, and invalidates the
 corresponding cached treatment without duplicating prose in this suite.
 
+## Canonical full-rule rendering
+
+A full-rule treatment excludes YAML frontmatter because frontmatter routes the rule
+rather than instructing the model. It includes every canonical body section: role
+prose, principles, concern directives, anti-hallucination examples, scope,
+enforcement, and references. Leave-one-out rendering removes the exact source lines
+for one parsed item. It preserves all surrounding Markdown and removes a heading and
+its structural table lines when every item in that section is omitted.
+
 ## Commands
 
 Validate source mappings and evaluator names without contacting Ollama:
