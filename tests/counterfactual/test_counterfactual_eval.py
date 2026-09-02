@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from dataclasses import asdict
@@ -27,6 +28,26 @@ ANTITHESIS_ID = "writing-conventions.rhetoric-and-structure.never-use-the-it-s-n
 ANTITHESIS_EXEMPLAR_ID = (
     "writing-conventions.anti-hallucination.it-s-not-a-hyperparameter-it-s-a-design-c2cbb66c"
 )
+
+
+def _write_cached_response(
+    run_dir: Path,
+    config: evaluation.ExperimentConfig,
+    job: evaluation.Job,
+    content: str,
+) -> None:
+    """Write one request-valid response pair for report and calibration tests."""
+    text_path, metadata_path = evaluation._artifact_paths(run_dir, job)
+    text_path.parent.mkdir(parents=True, exist_ok=True)
+    text_path.write_text(content)
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "request_hash": evaluation._stable_hash(evaluation._request_payload(config, job)),
+                "response_hash": hashlib.sha256(content.encode()).hexdigest(),
+            }
+        )
+    )
 
 
 def test_coverage_inventory_records_every_canonical_source_item(tmp_path: Path) -> None:
@@ -151,24 +172,25 @@ def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None
 
 def test_calibration_collects_matches_and_deterministic_nonmatches(tmp_path: Path) -> None:
     """Prepare reproducible real-response samples for evaluator boundary review."""
+    config = evaluation.load_config()
+    prompts = evaluation.load_prompts()
     cases = evaluation.load_cases()
     case = cases[ANTITHESIS_ID]
+    selected = {case.id: case}
     seed = 101
-    for prompt_id in case.prompts:
-        responses = {
-            "baseline": "The mechanism has one direct explanation.",
-            case.id: "It's not a small change, it's a redesign.",
-        }
-        for arm, response in responses.items():
-            path = tmp_path / "responses" / arm / prompt_id / f"{seed}.txt"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(response)
+    for job in evaluation.build_jobs(selected, prompts, (seed,)):
+        content = (
+            "The mechanism has one direct explanation."
+            if job.arm == "baseline"
+            else "It's not a small change, it's a redesign."
+        )
+        _write_cached_response(tmp_path, config, job, content)
 
     first = evaluation.build_evaluator_calibration(
-        tmp_path, {case.id: case}, (seed,), nonmatch_sample=2
+        tmp_path, config, prompts, selected, (seed,), nonmatch_sample=2
     )
     second = evaluation.build_evaluator_calibration(
-        tmp_path, {case.id: case}, (seed,), nonmatch_sample=2
+        tmp_path, config, prompts, selected, (seed,), nonmatch_sample=2
     )
 
     antithesis = first["antithesis-pivot"]
@@ -193,9 +215,12 @@ def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> 
 
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     case_ids = {case["id"] for case in manifest["cases"]}
-    loaded_prompts, loaded_cases, loaded_seeds = evaluation._load_manifest_run(tmp_path)
+    loaded_config, loaded_prompts, loaded_cases, loaded_seeds = evaluation._load_manifest_run(
+        tmp_path
+    )
     assert case_ids == {first.id, second.id}
     assert manifest["evaluator_versions"] == [evaluation.evaluator_version()]
+    assert loaded_config == evaluation.ExperimentConfig(**{**asdict(config), "seeds": (101,)})
     assert loaded_prompts == prompts
     assert loaded_cases == {first.id: first, second.id: second}
     assert loaded_seeds == (101,)
@@ -243,20 +268,37 @@ def test_manifest_merge_upgrades_legacy_case_defaults(tmp_path: Path) -> None:
     assert updated["cases"][0]["treatment_hash"] == case.treatment_hash
 
 
+def test_cache_validation_rejects_tampered_response_content(tmp_path: Path) -> None:
+    """Require response content to match its recorded request-valid hash."""
+    config = evaluation.load_config()
+    prompt = next(iter(evaluation.load_prompts().values()))
+    job = evaluation.Job(arm="baseline", prompt=prompt, seed=101, instruction=None)
+    _write_cached_response(tmp_path, config, job, "Original response.")
+    text_path, _ = evaluation._artifact_paths(tmp_path, job)
+
+    assert evaluation._is_cached(tmp_path, config, job)
+    text_path.write_text("Tampered response.")
+    assert not evaluation._is_cached(tmp_path, config, job)
+
+
 def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) -> None:
     """Generate useful scoring output before every treatment arm finishes."""
+    config = evaluation.load_config()
     prompts = evaluation.load_prompts()
     all_cases = evaluation.load_cases()
     selected_cases = dict(list(all_cases.items())[:2])
     complete_case = next(iter(selected_cases.values()))
     seed = 101
-    for prompt_id in complete_case.prompts:
-        for arm in ("baseline", complete_case.id):
-            path = tmp_path / "responses" / arm / prompt_id / f"{seed}.txt"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("Neutral prose without a measured construction.")
+    for job in evaluation.build_jobs(selected_cases, prompts, (seed,)):
+        if job.arm in {"baseline", evaluation._case_treatment_arm(complete_case)}:
+            _write_cached_response(
+                tmp_path,
+                config,
+                job,
+                "Neutral prose without a measured construction.",
+            )
 
-    report_path = evaluation.write_report(tmp_path, prompts, selected_cases, (seed,))
+    report_path = evaluation.write_report(tmp_path, config, prompts, selected_cases, (seed,))
 
     scores = json.loads((tmp_path / "scores.json").read_text())
     report = report_path.read_text()

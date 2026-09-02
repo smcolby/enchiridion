@@ -888,9 +888,18 @@ def _is_cached(run_dir: Path, config: ExperimentConfig, job: Job) -> bool:
         return False
     try:
         metadata = json.loads(metadata_path.read_text())
+        content = text_path.read_text()
     except (json.JSONDecodeError, OSError):
         return False
-    return metadata.get("request_hash") == _stable_hash(_request_payload(config, job))
+    if metadata.get("request_hash") != _stable_hash(_request_payload(config, job)):
+        return False
+    content_hash = hashlib.sha256(content.encode()).hexdigest()
+    recorded_hash = metadata.get("response_hash")
+    if recorded_hash is None:
+        metadata["response_hash"] = content_hash
+        _atomic_write(metadata_path, json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+        return True
+    return recorded_hash == content_hash
 
 
 def _atomic_write(path: Path, content: str) -> None:
@@ -928,6 +937,7 @@ def _run_job(run_dir: Path, config: ExperimentConfig, job: Job) -> str:
         "request_hash": _stable_hash(payload),
         "request": payload,
         "response": response_metadata,
+        "response_hash": hashlib.sha256(content.encode()).hexdigest(),
         "word_count": word_count(content),
     }
     _atomic_write(text_path, content)
@@ -1258,15 +1268,20 @@ def _score_case(
 
 
 def _missing_case_responses(
-    run_dir: Path, case: EvaluationCase, seeds: tuple[int, ...]
+    run_dir: Path,
+    config: ExperimentConfig,
+    case: EvaluationCase,
+    seeds: tuple[int, ...],
+    jobs: dict[tuple[str, str, int], Job],
 ) -> list[str]:
-    """List missing paired response keys that prevent scoring one case."""
+    """List missing or invalid paired cache entries that prevent scoring one case."""
     missing: list[str] = []
     for prompt_id in case.prompts:
         for seed in seeds:
             for arm in (case.control_arm, _case_treatment_arm(case)):
-                path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
-                if not path.is_file():
+                key = (arm, prompt_id, seed)
+                job = jobs.get(key)
+                if job is None or not _is_cached(run_dir, config, job):
                     missing.append(f"{arm}/{prompt_id}/{seed}")
     return missing
 
@@ -1362,15 +1377,17 @@ def _provenance_lines(run_dir: Path) -> list[str]:
 
 def write_report(
     run_dir: Path,
+    config: ExperimentConfig,
     prompts: dict[str, PromptSpec],
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
 ) -> Path:
-    """Score complete cases and identify arms still pending in a partial run."""
+    """Score complete validated cases and identify arms still pending."""
     scores: list[dict[str, Any]] = []
     pending: dict[str, list[str]] = {}
+    jobs = {(job.arm, job.prompt.id, job.seed): job for job in build_jobs(cases, prompts, seeds)}
     for case in cases.values():
-        missing = _missing_case_responses(run_dir, case, seeds)
+        missing = _missing_case_responses(run_dir, config, case, seeds, jobs)
         if missing:
             pending[case.id] = missing
             continue
@@ -1425,11 +1442,13 @@ def write_report(
 
 def build_evaluator_calibration(
     run_dir: Path,
+    config: ExperimentConfig,
+    prompts: dict[str, PromptSpec],
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
     nonmatch_sample: int = 10,
 ) -> dict[str, dict[str, Any]]:
-    """Collect all real matches and deterministic nonmatch samples by evaluator."""
+    """Collect matches and nonmatches from request-validated response artifacts."""
     requests: dict[tuple[str, str, str, int], set[str]] = {}
     for case in cases.values():
         for arm in {case.control_arm, _case_treatment_arm(case)}:
@@ -1438,12 +1457,22 @@ def build_evaluator_calibration(
                     key = (case.evaluator, arm, prompt_id, seed)
                     requests.setdefault(key, set()).add(case.id)
 
+    jobs = {(job.arm, job.prompt.id, job.seed): job for job in build_jobs(cases, prompts, seeds)}
     calibration: dict[str, dict[str, Any]] = {}
     nonmatches: dict[str, list[dict[str, Any]]] = {}
     for (evaluator_name, arm, prompt_id, seed), case_ids in sorted(requests.items()):
-        path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
-        if not path.is_file():
+        evaluator_data = calibration.setdefault(
+            evaluator_name,
+            {"matched_responses": [], "sampled_nonmatches": [], "invalid_responses": []},
+        )
+        key = (arm, prompt_id, seed)
+        job = jobs.get(key)
+        if job is None or not _is_cached(run_dir, config, job):
+            evaluator_data["invalid_responses"].append(
+                {"arm": arm, "prompt": prompt_id, "seed": seed}
+            )
             continue
+        path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
         text = path.read_text()
         matches = EVALUATORS[evaluator_name](text)
         strict_evaluator = STRICT_EVALUATORS.get(evaluator_name)
@@ -1458,10 +1487,6 @@ def build_evaluator_calibration(
             "strict_occurrences": len(strict_matches),
             "snippets": [asdict(match) for match in matches],
         }
-        evaluator_data = calibration.setdefault(
-            evaluator_name,
-            {"matched_responses": [], "sampled_nonmatches": []},
-        )
         if matches:
             evaluator_data["matched_responses"].append(record)
         else:
@@ -1474,19 +1499,23 @@ def build_evaluator_calibration(
         )
         calibration.setdefault(
             evaluator_name,
-            {"matched_responses": [], "sampled_nonmatches": []},
+            {"matched_responses": [], "sampled_nonmatches": [], "invalid_responses": []},
         )["sampled_nonmatches"] = ordered[:nonmatch_sample]
     return calibration
 
 
 def write_evaluator_calibration(
     run_dir: Path,
+    config: ExperimentConfig,
+    prompts: dict[str, PromptSpec],
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
     nonmatch_sample: int = 10,
 ) -> tuple[Path, Path]:
     """Write JSON and Markdown packets for manual evaluator calibration."""
-    calibration = build_evaluator_calibration(run_dir, cases, seeds, nonmatch_sample)
+    calibration = build_evaluator_calibration(
+        run_dir, config, prompts, cases, seeds, nonmatch_sample
+    )
     json_path = run_dir / "calibration.json"
     markdown_path = run_dir / "calibration.md"
     _atomic_write(json_path, json.dumps(calibration, indent=2, sort_keys=True) + "\n")
@@ -1495,13 +1524,13 @@ def write_evaluator_calibration(
         "",
         "Review every matched response and each sampled nonmatch at its recorded path.",
         "",
-        "| Evaluator | Matched responses | Sampled nonmatches |",
-        "|---|---:|---:|",
+        "| Evaluator | Matched responses | Sampled nonmatches | Invalid responses |",
+        "|---|---:|---:|---:|",
     ]
     for evaluator_name, data in sorted(calibration.items()):
         lines.append(
             f"| {evaluator_name} | {len(data['matched_responses'])} | "
-            f"{len(data['sampled_nonmatches'])} |"
+            f"{len(data['sampled_nonmatches'])} | {len(data['invalid_responses'])} |"
         )
     _atomic_write(markdown_path, "\n".join(lines) + "\n")
     return json_path, markdown_path
@@ -1563,9 +1592,22 @@ def _latest_run() -> Path:
 
 def _load_manifest_run(
     run_dir: Path,
-) -> tuple[dict[str, PromptSpec], dict[str, EvaluationCase], tuple[int, ...]]:
-    """Reconstruct report inputs from an immutable run manifest."""
+) -> tuple[
+    ExperimentConfig,
+    dict[str, PromptSpec],
+    dict[str, EvaluationCase],
+    tuple[int, ...],
+]:
+    """Reconstruct validated generation and report inputs from a run manifest."""
     raw = json.loads((run_dir / "manifest.json").read_text())
+    config_data = _require_mapping(raw.get("config"), "manifest.config")
+    seeds = tuple(config_data.get("seeds", []))
+    config = ExperimentConfig(
+        **{
+            **config_data,
+            "seeds": seeds,
+        }
+    )
     prompts = {
         _validate_id(_require_string(item.get("id"), "prompt id"), "prompt id"): PromptSpec(
             id=_validate_id(_require_string(item.get("id"), "prompt id"), "prompt id"),
@@ -1580,7 +1622,7 @@ def _load_manifest_run(
         for item in raw["cases"]
         if isinstance(item, dict)
     }
-    return prompts, cases, tuple(raw["config"]["seeds"])
+    return config, prompts, cases, seeds
 
 
 def main() -> None:
@@ -1623,15 +1665,15 @@ def main() -> None:
     try:
         if args.command in {"report", "calibrate"}:
             run_dir = _resolve_run_dir(args.run_id) if args.run_id else _latest_run()
-            prompts, cases, seeds = _load_manifest_run(run_dir)
+            config, prompts, cases, seeds = _load_manifest_run(run_dir)
             if args.command == "report":
-                report = write_report(run_dir, prompts, cases, seeds)
+                report = write_report(run_dir, config, prompts, cases, seeds)
                 print(f"Wrote {report.relative_to(REPO)}")
                 return
             if args.nonmatches < 1:
                 raise ValueError("nonmatches must be positive")
             json_path, markdown_path = write_evaluator_calibration(
-                run_dir, cases, seeds, args.nonmatches
+                run_dir, config, prompts, cases, seeds, args.nonmatches
             )
             print(f"Wrote {json_path.relative_to(REPO)}")
             print(f"Wrote {markdown_path.relative_to(REPO)}")
@@ -1673,7 +1715,7 @@ def main() -> None:
         if workers < 1:
             raise ValueError("workers must be positive")
         run_dir = run_experiment(config, prompts, cases, seeds, workers)
-        report = write_report(run_dir, prompts, cases, seeds)
+        report = write_report(run_dir, config, prompts, cases, seeds)
         print(f"Wrote {report.relative_to(REPO)}")
     except (FileNotFoundError, KeyError, OSError, RuntimeError, ValueError) as error:
         raise SystemExit(str(error)) from error
