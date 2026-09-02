@@ -224,7 +224,9 @@ def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> 
     assert loaded_prompts == prompts
     assert loaded_cases == {first.id: first, second.id: second}
     assert loaded_seeds == (101,)
-    assert "- Model digest: `test-digest`" in evaluation._provenance_lines(tmp_path)
+    provenance = evaluation._provenance_lines(tmp_path)
+    assert "- Model digest: `test-digest`" in provenance
+    assert f"- Scoring evaluator version: `{evaluation.evaluator_version()}`" in provenance
 
 
 def test_stale_evaluator_binding_fails_before_generation(monkeypatch: _MonkeyPatch) -> None:
@@ -303,6 +305,7 @@ def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) ->
     scores = json.loads((tmp_path / "scores.json").read_text())
     report = report_path.read_text()
     assert [score["id"] for score in scores] == [complete_case.id]
+    assert scores[0]["scoring_evaluator_version"] == evaluation.evaluator_version()
     assert "## Strict and expanded evaluator views" in report
     assert "## Source-item comparison" in report
     assert "zero-exposure-uninformative" in report
