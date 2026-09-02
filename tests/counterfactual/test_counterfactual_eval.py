@@ -149,8 +149,30 @@ def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> 
 
     manifest = json.loads((tmp_path / "manifest.json").read_text())
     case_ids = {case["id"] for case in manifest["cases"]}
+    loaded_prompts, loaded_cases, loaded_seeds = evaluation._load_manifest_run(tmp_path)
     assert case_ids == {first.id, second.id}
     assert manifest["evaluator_versions"] == [evaluation.evaluator_version()]
+    assert loaded_prompts == prompts
+    assert loaded_cases == {first.id: first, second.id: second}
+    assert loaded_seeds == (101,)
+
+
+def test_stale_evaluator_binding_fails_before_generation(monkeypatch: _MonkeyPatch) -> None:
+    """Reject evaluator metadata whose source-derived identifier no longer resolves."""
+    stale = evaluation.EvaluationBinding(
+        source_item_id="writing-conventions.missing.stale-00000000",
+        evaluator="antithesis-pivot",
+        prompts=evaluation.ALL_PROMPT_IDS,
+    )
+    monkeypatch.setattr(evaluation, "SCREENING_BINDINGS", (stale,))
+
+    message = ""
+    try:
+        evaluation.load_cases()
+    except ValueError as error:
+        message = str(error)
+
+    assert "stale evaluator binding" in message
 
 
 def test_manifest_merge_upgrades_legacy_case_defaults(tmp_path: Path) -> None:
