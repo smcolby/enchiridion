@@ -46,6 +46,16 @@ no em-dashes, no cleft frames, no unquantified intensifiers, US spelling.
   (this is the `writing-conventions` colon-as-evidence rule, stated positively).
 - Acknowledge limits in the flow of the argument, not as a hedged disclaimer
   section: say where the comparison could still mislead, and keep going.
+- Features are inputs, not readers. A feature block is input into, fit through,
+  or passed to a model; a model does not "read" a featureset and a featureset
+  is not "read by" a regressor. Write "every row is input into TabPFN", not
+  "every row is read by TabPFN" or "the model reading it".
+- Drop self-referential scaffolding. Name the object directly instead of
+  routing the reader back through the current section or another source with
+  possessive back-references. "the best subset here (0.4437)" beats "panel
+  02's own combo-sweep winner"; "in the N283T report's comparison" beats "in
+  the N283T report's own comparison". The words "this panel's own", "that X's
+  own ... for", and "reruns this panel's own" are the tell.
 
 ## Section shape
 
@@ -57,6 +67,13 @@ no em-dashes, no cleft frames, no unquantified intensifiers, US spelling.
 - Link inline and often: wrap the reference in the noun it names
   (`[Buterez et al. 2024](url)`), not a bare "click here" or a trailing
   citation list.
+- Captions orient, prose interprets. A figure caption states what the figure
+  shows so a reader can read the chart: the numbers plotted, the axes, and
+  which row is which. The finding, the mechanism, and any recommendation belong
+  in the main-text prose. Do not park the section's conclusion in the caption
+  ("Calibration makes this worse ... the likely explanation is ... reserve this
+  step for ..."); the caption keeps the readouts (`0.4356 → 0.4507 mean MAE`)
+  and the prose carries the interpretation.
 
 ## Tone
 
@@ -66,6 +83,13 @@ no em-dashes, no cleft frames, no unquantified intensifiers, US spelling.
   and an awful thing to own") reads as performance; state the concrete cost
   instead ("nine members to package, version, and rerun for an edge inside the
   bootstrap noise").
+- Keep a cooperative register for shared work. A challenge, a cited paper, or
+  another team's report is collaborative context, not a rival to beat. Report
+  what transferred and what did not, neutrally, and credit the source. "That
+  assumption did not hold. The paper contributed one component" is the register;
+  "It was not. The paper informed exactly one component" and "every one of those
+  routes lands worse than the weakest" read as scoring points against a
+  collaborator.
 - No unprompted concluding summary; end on the substantive point (inherited
   from `writing-conventions`).
 
@@ -79,6 +103,11 @@ no em-dashes, no cleft frames, no unquantified intensifiers, US spelling.
 | heading `Why this matters` / `The twist` | heading `The paper informed one component, not the architecture` |
 | `It's a fine way to win a challenge and an awful thing to maintain.` | `Nine members, each with its own weights and featurization to reproduce, is a lot to package and rerun for an edge inside the 0.02 MAE bootstrap noise.` |
 | a trailing `References:` block of bare URLs | inline links wrapped in the named noun, at first mention |
+| `every subset row here is read by TabPFN v2.5` | `every subset row here is input into TabPFN v2.5` |
+| `the featureset the final tabular model is reading` | `the featureset input into the final tabular model` |
+| `TabICL can't fit this panel's own combo-sweep winner` | `TabICL cannot fit the 386-column combination (it OOMs), so it uses a leaner featureset` |
+| `It was not. The paper informed exactly one component.` (competitive) | `That assumption did not hold. The paper contributed one component.` |
+| caption carrying the finding (`Calibration makes this worse ... reserve this step for ...`) | caption states the readouts (`0.4356 → 0.4507 mean MAE`); the finding and recommendation move to the prose |
 
 ## Scope
 
