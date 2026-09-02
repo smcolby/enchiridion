@@ -87,16 +87,20 @@ def test_latest_run_ignores_non_experiment_artifact_directories(
 
 
 def test_antithesis_evaluator_finds_variants_and_ignores_plain_contrast() -> None:
-    """Count the prohibited frames without counting every sentence containing not."""
+    """Count grammatical pivot variants without counting every sentence containing not."""
     text = (
-        "It is not a small adjustment, it is a redesign. "
-        "The mechanism is not just faster but easier to inspect. "
-        "The result is useful, although it is not final."
+        "It's not a small adjustment, it's a redesign. "
+        "The central problem isn't scale; it is coordination. "
+        "This wasn't merely an optimization but a change in objective. "
+        "The result is not speed, but rather consistency. "
+        "The team did not stop; instead, it changed direction. "
+        "The result is useful, although it is not final. "
+        "The remaining value is not known."
     )
 
     found = evaluation.evaluate_antithesis_pivot(text)
 
-    assert len(found) == 2
+    assert len(found) == 5
 
 
 def test_dash_evaluator_excludes_markdown_code() -> None:

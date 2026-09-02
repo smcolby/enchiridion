@@ -340,12 +340,21 @@ def _matches(text: str, pattern: re.Pattern[str]) -> list[Occurrence]:
 
 
 def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
-    """Find explicit not-X/Y and not-just-X-but-Y rhetorical constructions."""
+    """Find high-precision grammatical variants of antithesis pivots."""
     prose = _visible_prose(text)
+    subject = r"[a-z][\w’'-]*(?:[ \t]+[a-z][\w’'-]*){0,5}"
+    contracted_subject = r"(?:it|this|that|he|she|there)[’']s"
+    negative_copula = (
+        rf"(?:{subject}[ \t]+(?:(?:is|was|are|were)[ \t]+not|"
+        rf"(?:isn|wasn|aren|weren)[’']t)|{contracted_subject}[ \t]+not)"
+    )
+    positive_copula = rf"(?:{subject}[ \t]+(?:is|was|are|were)|{contracted_subject})"
     pattern = re.compile(
-        r"\b(?:it|this|that)\s+(?:is|was|'s)\s+not\b[^.!?\n]{0,140}?[,;:]\s*"
-        r"(?:it|this|that)\s+(?:is|was|'s)\b|"
-        r"\bnot\s+(?:just|merely|only)\b[^.!?\n]{0,140}?\bbut\b",
+        rf"\b{negative_copula}\b[^.!?\n]{{1,140}}?[,;:]\s*"
+        rf"(?:(?:but|rather|instead)\s*,?\s*)?{positive_copula}\b|"
+        r"\b(?:not|(?:isn|wasn|aren|weren)[’']t)\s+(?:just|merely|only)\b"
+        r"[^.!?\n]{1,140}?\bbut(?:\s+also)?\b|"
+        r"\bnot\b[^.!?\n]{1,140}?[,;:]\s*(?:but\s+rather|rather|instead)\b",
         re.IGNORECASE,
     )
     return _matches(prose, pattern)
