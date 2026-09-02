@@ -216,6 +216,45 @@ def _canonical_source_items() -> dict[str, rule_template.SourceItem]:
     return {item.id: item for artifact in rule_template.load_inventory() for item in artifact.items}
 
 
+def build_evaluator_coverage() -> list[dict[str, Any]]:
+    """Record evaluator eligibility and coverage for every canonical source item."""
+    bindings = {binding.source_item_id: binding for binding in SCREENING_BINDINGS}
+    coverage: list[dict[str, Any]] = []
+    for artifact in rule_template.load_inventory():
+        for item in artifact.items:
+            binding = bindings.get(item.id)
+            if binding is not None:
+                status = "evaluator-bound"
+                evaluator = binding.evaluator
+            elif item.treatment is None:
+                status = "structural-context"
+                evaluator = None
+            else:
+                status = "no-deterministic-evaluator"
+                evaluator = None
+            coverage.append(
+                {
+                    "id": item.id,
+                    "path": item.path,
+                    "section": item.section,
+                    "kind": item.kind,
+                    "has_treatment": item.treatment is not None,
+                    "status": status,
+                    "evaluator": evaluator,
+                }
+            )
+    return coverage
+
+
+def write_evaluator_coverage(
+    path: Path = ARTIFACTS_DIR / "evaluator-coverage.json",
+) -> Path:
+    """Write the complete generated evaluator coverage inventory."""
+    coverage = build_evaluator_coverage()
+    _atomic_write(path, json.dumps(coverage, indent=2, sort_keys=True) + "\n")
+    return path
+
+
 def composite_id_for(parent_id: str, exemplar_id: str) -> str:
     """Derive one composite arm identifier entirely from its source components."""
     digest = hashlib.sha256(f"{parent_id}\n{exemplar_id}".encode()).hexdigest()[:8]
@@ -1401,7 +1440,14 @@ def main() -> None:
     """Validate, estimate, run, or report the counterfactual experiment."""
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("inventory", help="validate source mappings and case metadata")
+    inventory_parser = subparsers.add_parser(
+        "inventory", help="validate source mappings and case metadata"
+    )
+    inventory_parser.add_argument(
+        "--write-coverage",
+        action="store_true",
+        help="write ignored evaluator coverage JSON",
+    )
 
     estimate_parser = subparsers.add_parser("estimate", help="show the uncached request count")
     estimate_parser.add_argument("--seeds", type=int, help="use the first N configured seeds")
@@ -1433,7 +1479,15 @@ def main() -> None:
                 print(f"ERROR: {error}", file=sys.stderr)
             raise SystemExit(1)
         if args.command == "inventory":
-            print(f"OK: {len(all_cases)} cases, {len(prompts)} prompts, model {config.model}")
+            coverage = build_evaluator_coverage()
+            covered = sum(item["status"] == "evaluator-bound" for item in coverage)
+            print(
+                f"OK: {len(all_cases)} cases, {len(prompts)} prompts, model {config.model}; "
+                f"{covered}/{len(coverage)} source items evaluator-bound"
+            )
+            if args.write_coverage:
+                path = write_evaluator_coverage()
+                print(f"Wrote {path.relative_to(REPO)}")
             return
 
         cases = _selected_cases(all_cases, args.case)

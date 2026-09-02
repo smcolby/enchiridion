@@ -28,6 +28,19 @@ ANTITHESIS_EXEMPLAR_ID = (
 )
 
 
+def test_coverage_inventory_records_every_canonical_source_item(tmp_path: Path) -> None:
+    """Expose evaluator-bound and uncovered items without dropping structural context."""
+    coverage = evaluation.build_evaluator_coverage()
+    canonical_ids = {item.id for artifact in template.load_inventory() for item in artifact.items}
+
+    path = evaluation.write_evaluator_coverage(tmp_path / "coverage.json")
+    written = json.loads(path.read_text())
+    covered = [item for item in coverage if item["status"] == "evaluator-bound"]
+    assert {item["id"] for item in coverage} == canonical_ids
+    assert len(covered) == len(evaluation.SCREENING_BINDINGS)
+    assert written == coverage
+
+
 def test_inventory_maps_derived_cases_to_canonical_source_items() -> None:
     """Require source-derived cases, prompts, evaluators, and relationships to resolve."""
     prompts = evaluation.load_prompts()

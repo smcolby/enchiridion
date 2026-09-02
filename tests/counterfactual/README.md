@@ -52,6 +52,13 @@ Validate source mappings and evaluator names without contacting Ollama:
 python tools/counterfactual_eval.py inventory
 ```
 
+Write the complete ignored coverage inventory, including source items without a
+deterministic evaluator:
+
+```bash
+python tools/counterfactual_eval.py inventory --write-coverage
+```
+
 Estimate the screening matrix:
 
 ```bash
