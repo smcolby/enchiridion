@@ -331,12 +331,13 @@ def build_router(rules: list[tuple[Path, dict, str]]) -> str:
 
 # Coding Rules Index
 
-Before creating or modifying files that match a rule's scope, read the rule
-file (paths are relative to this skill directory). Rules with tier
-`requested` activate when the task matches their description rather than by
-file pattern. Each rule states principles, concrete directives, and banned
-patterns with correct replacements; directives marked as enforced by tooling
-are gates, so fix the code rather than fighting them.
+Activate rules by tier: read every `always` rule, every `scoped` rule whose
+scope matches the target file, and every `requested` rule whose description
+matches the current task. Read an `invoked` rule only when the user or an
+active playbook names it. Rule paths are relative to this skill directory.
+Each rule states principles, concrete directives, and banned patterns with
+correct replacements; directives marked as enforced by tooling are gates, so
+fix the code rather than fighting them.
 
 | Rule | Tier | Applies to | Rule file | When to read |
 |---|---|---|---|---|
@@ -347,9 +348,9 @@ are gates, so fix the code rather than fighting them.
 def build_claude_rules(rules: list[tuple[Path, dict, str]]) -> dict[str, str]:
     """Render the committed Claude Code rules directory from canonical rules.
 
-    Claude Code activates these globally through the ~/.claude/rules symlink;
-    rules whose tier has no claude representation (requested/invoked) are
-    omitted and remain reachable through the rules router skill.
+    Claude Code activates these globally through the ~/.claude/rules symlink.
+    Requested and invoked rules are omitted from global native activation and
+    remain reachable through the rules router skill.
     """
     import render_rules
 

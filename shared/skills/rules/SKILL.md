@@ -7,12 +7,13 @@ description: 'Scoped coding rules catalog. Invoke before creating or modifying a
 
 # Coding Rules Index
 
-Before creating or modifying files that match a rule's scope, read the rule
-file (paths are relative to this skill directory). Rules with tier
-`requested` activate when the task matches their description rather than by
-file pattern. Each rule states principles, concrete directives, and banned
-patterns with correct replacements; directives marked as enforced by tooling
-are gates, so fix the code rather than fighting them.
+Activate rules by tier: read every `always` rule, every `scoped` rule whose
+scope matches the target file, and every `requested` rule whose description
+matches the current task. Read an `invoked` rule only when the user or an
+active playbook names it. Rule paths are relative to this skill directory.
+Each rule states principles, concrete directives, and banned patterns with
+correct replacements; directives marked as enforced by tooling are gates, so
+fix the code rather than fighting them.
 
 | Rule | Tier | Applies to | Rule file | When to read |
 |---|---|---|---|---|
