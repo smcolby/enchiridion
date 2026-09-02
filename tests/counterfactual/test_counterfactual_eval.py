@@ -173,3 +173,16 @@ def test_banned_vocabulary_evaluator_is_case_insensitive() -> None:
     )
 
     assert len(found) == 2
+
+
+def test_banned_vocabulary_evaluator_finds_inflected_forms() -> None:
+    """Count regular inflections without matching unrelated words with similar stems."""
+    text = (
+        "Delving through tapestries, beacons, testaments, and symphonies, the report "
+        "pivotally landscapes several realms while navigating them, leveraging every "
+        "detail seamlessly. Navigation, landscaping, a lever, and a seam remain literal."
+    )
+
+    found = evaluation.evaluate_banned_vocabulary(text)
+
+    assert len(found) == 11

@@ -419,21 +419,21 @@ def evaluate_concluding_summary(text: str) -> list[Occurrence]:
 
 
 def evaluate_banned_vocabulary(text: str) -> list[Occurrence]:
-    """Find the explicit overused vocabulary listed by the prose rule."""
-    words = (
-        "delve",
-        "tapestry",
-        "beacon",
-        "testament",
-        "symphony",
-        "pivotal",
-        "landscape",
-        "realm",
-        "navigate",
-        "leverage",
-        "seamless",
+    """Find listed overused vocabulary and its regular inflections."""
+    forms = (
+        r"delv(?:e|es|ed|ing)",
+        r"tapestr(?:y|ies)",
+        r"beacons?",
+        r"testaments?",
+        r"symphon(?:y|ies)",
+        r"pivotal(?:ly)?",
+        r"landscapes?",
+        r"realms?",
+        r"navigat(?:e|es|ed|ing)",
+        r"leverag(?:e|es|ed|ing)",
+        r"seamless(?:ly)?",
     )
-    pattern = re.compile(rf"\b(?:{'|'.join(words)})\b", re.IGNORECASE)
+    pattern = re.compile(rf"\b(?:{'|'.join(forms)})\b", re.IGNORECASE)
     return _matches(_visible_prose(text), pattern)
 
 
