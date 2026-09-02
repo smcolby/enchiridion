@@ -73,7 +73,7 @@ class PromptSpec:
 
 @dataclass(frozen=True)
 class EvaluationCase:
-    """Describe one source-derived directive, exemplar, or composed treatment."""
+    """Describe one source-derived canonical, composed, omission, or trial treatment."""
 
     id: str
     kind: str
@@ -90,6 +90,10 @@ class EvaluationCase:
     treatment_arm: str | None = None
     control_arm: str = "baseline"
     treatment_hash: str | None = None
+    trial_candidate: str | None = None
+    trial_candidate_hash: str | None = None
+    control_treatment_hash: str | None = None
+    control_instruction_words: int | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +113,14 @@ class ServerMetadata:
 
     ollama_version: str
     model_digest: str
+
+
+@dataclass(frozen=True)
+class TrialCandidate:
+    """Hold one parsed experimental directive and its exact content hash."""
+
+    text: str
+    content_hash: str
 
 
 @dataclass(frozen=True)
@@ -411,6 +423,115 @@ def load_cases() -> dict[str, EvaluationCase]:
     return cases
 
 
+def _parse_trial_candidate(raw: str) -> TrialCandidate:
+    """Parse exact candidate text while allowing one conventional terminal newline."""
+    candidate = raw.removesuffix("\n")
+    if not candidate or "\n" in candidate or "\r" in candidate or len(candidate.splitlines()) != 1:
+        raise ValueError("trial candidate must contain a single non-empty Markdown line")
+    if candidate != candidate.strip():
+        raise ValueError("trial candidate must not contain indentation or surrounding whitespace")
+    if (
+        rule_template.HEADING_RE.match(candidate)
+        or rule_template.LIST_ITEM_RE.match(candidate)
+        or candidate.startswith(("|", "```", "~~~", "<!--", "---"))
+    ):
+        raise ValueError("trial candidate must be directive prose without block structure")
+    return TrialCandidate(text=candidate, content_hash=treatment_hash(candidate))
+
+
+def load_trial_candidate(path: Path) -> TrialCandidate:
+    """Load one structurally unambiguous experimental directive from Markdown."""
+    resolved = path.resolve()
+    if resolved.suffix.lower() != ".md":
+        raise ValueError("trial candidate must be a Markdown file")
+    if not resolved.is_file():
+        raise FileNotFoundError(f"trial candidate does not exist: {path}")
+    return _parse_trial_candidate(resolved.read_text())
+
+
+def _trial_id(source_item_id: str, mode: str, treatment: str) -> str:
+    """Derive one trial identifier from its source, mode, and rendered treatment."""
+    identity = f"{source_item_id}\n{mode}\n{treatment}"
+    digest = hashlib.sha256(identity.encode()).hexdigest()[:8]
+    return f"{source_item_id}.trial-{mode}-{digest}"
+
+
+def build_trial_cases(
+    cases: dict[str, EvaluationCase],
+    source_item_id: str,
+    candidate: TrialCandidate,
+    mode: str,
+) -> dict[str, EvaluationCase]:
+    """Build one candidate comparison and the canonical arm that generates its control."""
+    if not isinstance(candidate, TrialCandidate):
+        raise TypeError("trial construction requires a parsed TrialCandidate")
+    parsed_candidate = _parse_trial_candidate(candidate.text)
+    if parsed_candidate.content_hash != candidate.content_hash:
+        raise ValueError("trial candidate hash does not match its parsed text")
+    candidate_text = candidate.text
+    if mode not in {"atomic", "full-rule"}:
+        raise ValueError("trial mode must be 'atomic' or 'full-rule'")
+    source_items = _canonical_source_items()
+    source_item = source_items.get(source_item_id)
+    if source_item is None:
+        raise ValueError(f"unknown trial source item '{source_item_id}'")
+    if source_item.kind != "directive" or source_item.treatment is None:
+        raise ValueError("trial source item must be a canonical directive")
+    if candidate_text == source_item.treatment:
+        raise ValueError("trial candidate must differ from the canonical directive")
+    canonical_case = cases.get(source_item_id)
+    if canonical_case is None:
+        raise ValueError(f"trial source item has no evaluator binding: {source_item_id}")
+
+    # Select the canonical atomic or full-rule arm as the paired control
+    if mode == "atomic":
+        control_case = canonical_case
+        treatment = candidate_text
+    else:
+        inventory = rule_template.load_inventory()
+        artifact = next(
+            (item for item in inventory if item.path == source_item.path),
+            None,
+        )
+        if artifact is None:
+            raise ValueError(f"trial source artifact is missing: {source_item.path}")
+        treatment = rule_template.render_rule_replacement(artifact, source_item_id, candidate_text)
+        matching_controls = [
+            case
+            for case in cases.values()
+            if case.kind == "full-rule"
+            and case.source == source_item.path
+            and case.evaluator == canonical_case.evaluator
+        ]
+        if len(matching_controls) != 1:
+            raise ValueError(
+                f"trial source item requires one full-rule control, found {len(matching_controls)}"
+            )
+        control_case = matching_controls[0]
+
+    case_id = _trial_id(source_item_id, mode, treatment)
+    trial_case = EvaluationCase(
+        id=case_id,
+        kind="trial",
+        source=source_item.path,
+        section=source_item.section,
+        evaluator=canonical_case.evaluator,
+        prompts=canonical_case.prompts,
+        source_item_ids=(source_item_id,),
+        treatment=treatment,
+        evidence="experimental-rewrite",
+        mode=f"trial-{mode}",
+        treatment_arm=case_id,
+        control_arm=_case_treatment_arm(control_case),
+        treatment_hash=treatment_hash(treatment),
+        trial_candidate=candidate_text,
+        trial_candidate_hash=candidate.content_hash,
+        control_treatment_hash=control_case.treatment_hash,
+        control_instruction_words=word_count(instruction_for_case(control_case.id, cases)),
+    )
+    return {control_case.id: control_case, trial_case.id: trial_case}
+
+
 def validate_inventory(
     cases: dict[str, EvaluationCase], prompts: dict[str, PromptSpec]
 ) -> list[str]:
@@ -418,6 +539,9 @@ def validate_inventory(
     errors: list[str] = []
     source_items = _canonical_source_items()
     available_arms = {"baseline", *(_case_treatment_arm(case) for case in cases.values())}
+    cases_by_arm: dict[str, list[EvaluationCase]] = {}
+    for available_case in cases.values():
+        cases_by_arm.setdefault(_case_treatment_arm(available_case), []).append(available_case)
     for case in cases.values():
         if case.evaluator not in EVALUATORS:
             errors.append(f"{case.id}: unknown evaluator '{case.evaluator}'")
@@ -452,6 +576,111 @@ def validate_inventory(
                 errors.append(f"{case.id}: leave-one-out case requires one omitted source item")
             if case.control_arm == "baseline":
                 errors.append(f"{case.id}: leave-one-out case requires a full-rule control")
+        elif case.kind == "trial":
+            if case.mode not in {"trial-atomic", "trial-full-rule"}:
+                errors.append(f"{case.id}: trial case has unsupported mode '{case.mode}'")
+            if not case.treatment or len(case.source_item_ids) != 1:
+                errors.append(f"{case.id}: trial case requires one modified source item")
+
+            # Reparse manifest candidate text before trusting its treatment provenance
+            parsed_candidate: TrialCandidate | None = None
+            if isinstance(case.trial_candidate, str):
+                try:
+                    parsed_candidate = _parse_trial_candidate(case.trial_candidate)
+                except ValueError as error:
+                    errors.append(f"{case.id}: {error}")
+            else:
+                errors.append(f"{case.id}: trial candidate must be text")
+            if (
+                parsed_candidate is None
+                or case.trial_candidate_hash != parsed_candidate.content_hash
+            ):
+                errors.append(f"{case.id}: trial candidate hash does not match candidate")
+
+            trial_source_id = case.source_item_ids[0] if len(case.source_item_ids) == 1 else None
+            source_item = source_items.get(trial_source_id) if trial_source_id else None
+            binding = next(
+                (item for item in SCREENING_BINDINGS if item.source_item_id == trial_source_id),
+                None,
+            )
+            if source_item is None or source_item.kind != "directive":
+                errors.append(f"{case.id}: trial source item must be a canonical directive")
+            elif case.source != source_item.path or case.section != source_item.section:
+                errors.append(f"{case.id}: trial source provenance differs from canonical item")
+            if (
+                binding is None
+                or binding.evaluator != case.evaluator
+                or binding.prompts != case.prompts
+            ):
+                errors.append(f"{case.id}: trial scoring metadata differs from source binding")
+            if parsed_candidate is not None and source_item is not None:
+                if parsed_candidate.text == source_item.treatment:
+                    errors.append(f"{case.id}: trial candidate duplicates canonical directive")
+
+            control_cases = cases_by_arm.get(case.control_arm, [])
+            matching_controls = [
+                control
+                for control in control_cases
+                if control.treatment_hash == case.control_treatment_hash
+            ]
+            if case.mode == "trial-atomic":
+                matching_controls = [
+                    control
+                    for control in matching_controls
+                    if control.kind == "directive" and control.id == trial_source_id
+                ]
+                control_label = "canonical atomic"
+            else:
+                matching_controls = [
+                    control
+                    for control in matching_controls
+                    if control.kind == "full-rule"
+                    and control.source == case.source
+                    and control.evaluator == case.evaluator
+                ]
+                control_label = "canonical full-rule"
+            if case.control_arm == "baseline" or not case.control_treatment_hash:
+                errors.append(f"{case.id}: trial case requires a canonical treatment control")
+            if not matching_controls:
+                errors.append(
+                    f"{case.id}: trial control hash does not match its {control_label} response arm"
+                )
+            elif case.control_instruction_words != word_count(
+                instruction_for_case(matching_controls[0].id, cases)
+            ):
+                errors.append(f"{case.id}: trial control instruction length does not match")
+
+            if parsed_candidate is not None and case.treatment and len(case.source_item_ids) == 1:
+                trial_mode = case.mode.removeprefix("trial-")
+                expected_id = _trial_id(case.source_item_ids[0], trial_mode, case.treatment)
+                if case.id != expected_id or case.treatment_arm != case.id:
+                    errors.append(f"{case.id}: trial identity does not match rendered treatment")
+                if case.mode == "trial-atomic":
+                    if case.treatment != parsed_candidate.text:
+                        errors.append(
+                            f"{case.id}: atomic trial treatment differs from its candidate"
+                        )
+                elif case.mode == "trial-full-rule":
+                    artifact = next(
+                        (
+                            item
+                            for item in rule_template.load_inventory()
+                            if source_item is not None and item.path == source_item.path
+                        ),
+                        None,
+                    )
+                    if artifact is None:
+                        errors.append(f"{case.id}: trial source artifact is missing")
+                    else:
+                        expected_treatment = rule_template.render_rule_replacement(
+                            artifact,
+                            case.source_item_ids[0],
+                            parsed_candidate.text,
+                        )
+                        if case.treatment != expected_treatment:
+                            errors.append(
+                                f"{case.id}: full-rule treatment does not match candidate"
+                            )
         else:
             errors.append(f"{case.id}: unsupported kind '{case.kind}'")
 
@@ -475,7 +704,13 @@ def instruction_for_case(
         cycle = " -> ".join((*active, case_id))
         raise ValueError(f"case component cycle: {cycle}")
     case = cases[case_id]
-    if case.kind in {"directive", "anti-hallucination", "full-rule", "leave-one-out"}:
+    if case.kind in {
+        "directive",
+        "anti-hallucination",
+        "full-rule",
+        "leave-one-out",
+        "trial",
+    }:
         return _require_string(case.treatment, f"{case.id}.treatment")
     if case.kind == "composite":
         return "\n\n".join(
@@ -1019,6 +1254,7 @@ def _case_from_manifest_item(item: dict[str, Any]) -> EvaluationCase:
         "composite": "composite",
         "full-rule": "full-rule",
         "leave-one-out": "leave-one-out",
+        "trial": "trial-atomic",
     }
     data.setdefault("mode", mode_defaults.get(kind, "one-at-a-time"))
     data.setdefault("treatment_arm", None)
@@ -1314,6 +1550,12 @@ def _score_case(
         "source_item_ids": list(case.source_item_ids),
         "source_hashes": [source_id.rsplit("-", 1)[-1] for source_id in case.source_item_ids],
         "treatment_hash": case.treatment_hash,
+        "trial_candidate_hash": case.trial_candidate_hash,
+        "control_treatment_hash": case.control_treatment_hash,
+        "control_instruction_words": case.control_instruction_words,
+        "treatment_instruction_words": (
+            word_count(case.treatment) if case.treatment is not None else None
+        ),
         "control_arm": case.control_arm,
         "treatment_arm": treatment_arm,
         "parent": case.parent,
@@ -1416,6 +1658,36 @@ def _source_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _trial_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
+    """Render candidate-versus-canonical evidence separately from directive ablations."""
+    trials = [score for score in scores if str(score.get("mode", "")).startswith("trial-")]
+    if not trials:
+        return []
+    lines = [
+        "",
+        "## Trial comparisons",
+        "",
+        "Negative rate deltas favor the trial candidate over the current canonical control.",
+        "",
+        "| Source item | Mode | Control hash | Candidate hash | Rate delta | 95% CI | "
+        "Control instruction words | Trial instruction words |",
+        "|---|---|---|---|---:|---:|---:|---:|",
+    ]
+    for score in sorted(trials, key=lambda item: item["id"]):
+        lower, upper = score["paired_rate_delta_ci95"]
+        source_id = score["source_item_ids"][0]
+        lines.append(
+            f"| `{source_id}` | {score['mode']} | "
+            f"`{score['control_treatment_hash']}` | "
+            f"`{score['trial_candidate_hash']}` | "
+            f"{score['rate_delta_per_1000_words']:.3f} | "
+            f"[{lower:.3f}, {upper:.3f}] | "
+            f"{score['control_instruction_words']} | "
+            f"{score['treatment_instruction_words']} |"
+        )
+    return lines
+
+
 def _provenance_lines(run_dir: Path) -> list[str]:
     """Render generation and evaluator provenance from an available manifest."""
     manifest_path = run_dir / "manifest.json"
@@ -1493,6 +1765,7 @@ def write_report(
 
     lines.extend(_sensitivity_lines(scores))
     lines.extend(_source_comparison_lines(scores))
+    lines.extend(_trial_comparison_lines(scores))
     if pending:
         lines.extend(["", "## Pending cases", ""])
         lines.extend(
@@ -1702,6 +1975,9 @@ def _load_manifest_run(
                 case,
                 treatment_hash=treatment_hash(instruction_for_case(case_id, cases)),
             )
+    errors = validate_inventory(cases, prompts)
+    if errors:
+        raise ValueError(f"invalid manifest case inventory: {'; '.join(errors)}")
     return config, prompts, cases, seeds
 
 
@@ -1726,6 +2002,25 @@ def main() -> None:
     run_parser.add_argument("--seeds", type=int, help="use the first N configured seeds")
     run_parser.add_argument("--case", action="append", help="limit to one case; repeatable")
     run_parser.add_argument("--workers", type=int, help="override queue concurrency")
+
+    trial_parser = subparsers.add_parser(
+        "trial", help="compare one experimental directive against its canonical control"
+    )
+    trial_parser.add_argument("--source-id", required=True, help="canonical directive source id")
+    trial_parser.add_argument(
+        "--candidate",
+        required=True,
+        type=Path,
+        help="item-only Markdown file containing the experimental directive",
+    )
+    trial_parser.add_argument(
+        "--mode",
+        choices=("atomic", "full-rule"),
+        default="full-rule",
+        help="compare isolated directives or complete rules",
+    )
+    trial_parser.add_argument("--seeds", type=int, help="use the first N configured seeds")
+    trial_parser.add_argument("--workers", type=int, help="override queue concurrency")
 
     report_parser = subparsers.add_parser("report", help="score a completed artifact run")
     report_parser.add_argument("--run-id", help="artifact run id; defaults to latest")
@@ -1779,7 +2074,16 @@ def main() -> None:
                 print(f"Wrote {path.relative_to(REPO)}")
             return
 
-        cases = _selected_cases(all_cases, args.case)
+        if args.command == "trial":
+            candidate = load_trial_candidate(args.candidate)
+            cases = build_trial_cases(all_cases, args.source_id, candidate, args.mode)
+            trial_errors = validate_inventory(cases, prompts)
+            if trial_errors:
+                for error in trial_errors:
+                    print(f"ERROR: {error}", file=sys.stderr)
+                raise SystemExit(1)
+        else:
+            cases = _selected_cases(all_cases, args.case)
         seeds = _selected_seeds(config, args.seeds)
         if args.command == "estimate":
             jobs = build_jobs(cases, prompts, seeds)

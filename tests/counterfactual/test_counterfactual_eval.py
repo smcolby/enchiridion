@@ -7,7 +7,7 @@ import json
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 TOOLS = Path(__file__).parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
@@ -48,6 +48,48 @@ def _write_cached_response(
             }
         )
     )
+
+
+def _trial_candidate_error(tmp_path: Path, content: str) -> str:
+    """Return the candidate parser error for one invalid Markdown payload."""
+    candidate_path = tmp_path / "candidate.md"
+    candidate_path.write_text(content)
+    try:
+        evaluation.load_trial_candidate(candidate_path)
+    except ValueError as error:
+        return str(error)
+    return ""
+
+
+def _write_trial_manifest(
+    run_dir: Path, mode: str = "full-rule", include_all_cases: bool = False
+) -> Path:
+    """Write one valid trial manifest for corruption tests."""
+    config = evaluation.load_config()
+    prompts = evaluation.load_prompts()
+    all_cases = evaluation.load_cases()
+    text = "State comparisons directly and avoid antithesis-pivot framing."
+    candidate = evaluation.TrialCandidate(
+        text=text,
+        content_hash=evaluation.treatment_hash(text),
+    )
+    trial_cases = evaluation.build_trial_cases(all_cases, ANTITHESIS_ID, candidate, mode)
+    cases = {**all_cases, **trial_cases} if include_all_cases else trial_cases
+    metadata = evaluation.ServerMetadata(
+        ollama_version="test-version",
+        model_digest="test-digest",
+    )
+    evaluation._write_manifest(run_dir, config, metadata, prompts, cases, (101,))
+    return run_dir / "manifest.json"
+
+
+def _manifest_load_error(run_dir: Path) -> str:
+    """Return the manifest validation error for one corrupted trial record."""
+    try:
+        evaluation._load_manifest_run(run_dir)
+    except ValueError as error:
+        return str(error)
+    return ""
 
 
 def test_coverage_inventory_records_every_canonical_source_item(tmp_path: Path) -> None:
@@ -121,6 +163,188 @@ def test_cases_include_full_rule_and_atomic_leave_one_out_treatments() -> None:
     selected = evaluation._selected_cases(cases, [leave_one_out.id])
     assert leave_one_out.id in selected
     assert any(case.treatment_arm == leave_one_out.control_arm for case in selected.values())
+
+
+def test_trial_cases_compare_one_candidate_against_canonical_controls(tmp_path: Path) -> None:
+    """Build atomic and full-rule trials without changing neighboring directives."""
+    candidate_path = tmp_path / "candidate.md"
+    candidate_path.write_text("State comparisons directly and avoid antithesis-pivot framing.\n")
+    candidate = evaluation.load_trial_candidate(candidate_path)
+    cases = evaluation.load_cases()
+
+    atomic = evaluation.build_trial_cases(cases, ANTITHESIS_ID, candidate, "atomic")
+    full_rule = evaluation.build_trial_cases(cases, ANTITHESIS_ID, candidate, "full-rule")
+    atomic_trial = next(case for case in atomic.values() if case.mode == "trial-atomic")
+    full_trial = next(case for case in full_rule.values() if case.mode == "trial-full-rule")
+
+    canonical_treatment = cases[ANTITHESIS_ID].treatment
+    assert canonical_treatment is not None
+    assert atomic_trial.control_arm == ANTITHESIS_ID
+    assert atomic_trial.treatment == candidate.text
+    assert full_trial.control_arm.startswith("writing-conventions.full-rule-")
+    assert candidate.text in (full_trial.treatment or "")
+    assert canonical_treatment not in (full_trial.treatment or "")
+    assert atomic_trial.trial_candidate == candidate.text
+    assert atomic_trial.trial_candidate_hash == candidate.content_hash
+    assert atomic_trial.control_treatment_hash == cases[ANTITHESIS_ID].treatment_hash
+    assert evaluation._case_from_manifest_item(asdict(atomic_trial)) == atomic_trial
+    assert len(atomic) == 2
+    assert len(full_rule) == 2
+
+    jobs = evaluation.build_jobs(atomic, evaluation.load_prompts(), (101,))
+    arms = {job.arm for job in jobs}
+    assert arms == {"baseline", ANTITHESIS_ID, atomic_trial.treatment_arm}
+
+
+def test_trial_cases_reject_unchanged_candidate() -> None:
+    """Reject a trial that would duplicate its canonical control request."""
+    cases = evaluation.load_cases()
+    canonical = cases[ANTITHESIS_ID].treatment
+    assert canonical is not None
+
+    message = ""
+    candidate = evaluation.TrialCandidate(
+        text=canonical,
+        content_hash=evaluation.treatment_hash(canonical),
+    )
+    try:
+        evaluation.build_trial_cases(cases, ANTITHESIS_ID, candidate, "atomic")
+    except ValueError as error:
+        message = str(error)
+
+    assert "must differ from the canonical directive" in message
+
+
+def test_trial_builder_rejects_unparsed_candidate() -> None:
+    """Require candidate text to cross the typed parser boundary before construction."""
+    cases = evaluation.load_cases()
+    candidate: Any = "State comparisons directly."
+
+    message = ""
+    try:
+        evaluation.build_trial_cases(cases, ANTITHESIS_ID, candidate, "atomic")
+    except TypeError as error:
+        message = str(error)
+
+    assert "parsed TrialCandidate" in message
+
+
+def test_trial_candidate_rejects_empty_markdown(tmp_path: Path) -> None:
+    """Reject a candidate file without directive prose."""
+    message = _trial_candidate_error(tmp_path, "")
+
+    assert "single non-empty Markdown line" in message
+
+
+def test_trial_candidate_rejects_indented_markdown(tmp_path: Path) -> None:
+    """Reject candidate indentation that could denote a Markdown code block."""
+    message = _trial_candidate_error(tmp_path, "    indented code\n")
+
+    assert "indentation or surrounding whitespace" in message
+
+
+def test_trial_candidate_rejects_surrounding_whitespace(tmp_path: Path) -> None:
+    """Reject candidate bytes that would be normalized before hashing."""
+    message = _trial_candidate_error(tmp_path, " padded prose \n")
+
+    assert "indentation or surrounding whitespace" in message
+
+
+def test_trial_candidate_rejects_multiline_markdown(tmp_path: Path) -> None:
+    """Reject candidates spanning more than one Markdown source line."""
+    message = _trial_candidate_error(tmp_path, "First paragraph.\nSecond paragraph.\n")
+
+    assert "single non-empty Markdown line" in message
+
+
+def test_trial_candidate_rejects_markdown_block_structure(tmp_path: Path) -> None:
+    """Reject block structure that cannot replace one directive paragraph."""
+    message = _trial_candidate_error(tmp_path, "# Heading\n")
+
+    assert "without block structure" in message
+
+
+def test_manifest_rejects_corrupted_trial_candidate(tmp_path: Path) -> None:
+    """Recompute candidate hashes before reporting a persisted trial."""
+    manifest_path = _write_trial_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    trial = next(case for case in manifest["cases"] if case["kind"] == "trial")
+    trial["trial_candidate"] = "Altered candidate."
+    manifest_path.write_text(json.dumps(manifest))
+
+    message = _manifest_load_error(tmp_path)
+
+    assert "candidate hash" in message
+
+
+def test_manifest_rejects_corrupted_trial_treatment(tmp_path: Path) -> None:
+    """Reconstruct the full-rule replacement before reporting a trial."""
+    manifest_path = _write_trial_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    trial = next(case for case in manifest["cases"] if case["kind"] == "trial")
+    trial["treatment"] = "Altered full-rule treatment."
+    trial["treatment_hash"] = evaluation.treatment_hash(trial["treatment"])
+    manifest_path.write_text(json.dumps(manifest))
+
+    message = _manifest_load_error(tmp_path)
+
+    assert "full-rule treatment" in message
+
+
+def test_manifest_rejects_corrupted_trial_control(tmp_path: Path) -> None:
+    """Resolve the canonical control hash before reporting a trial."""
+    manifest_path = _write_trial_manifest(tmp_path)
+    manifest = json.loads(manifest_path.read_text())
+    trial = next(case for case in manifest["cases"] if case["kind"] == "trial")
+    trial["control_treatment_hash"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest))
+
+    message = _manifest_load_error(tmp_path)
+
+    assert "control hash" in message
+
+
+def test_manifest_rejects_unrelated_trial_control(tmp_path: Path) -> None:
+    """Require an atomic trial to use its own canonical directive as control."""
+    manifest_path = _write_trial_manifest(tmp_path, mode="atomic", include_all_cases=True)
+    manifest = json.loads(manifest_path.read_text())
+    trial = next(case for case in manifest["cases"] if case["kind"] == "trial")
+    unrelated = next(
+        case
+        for case in manifest["cases"]
+        if case["kind"] == "directive" and case["id"] != ANTITHESIS_ID
+    )
+    trial["control_arm"] = unrelated["id"]
+    trial["control_treatment_hash"] = unrelated["treatment_hash"]
+    trial["control_instruction_words"] = evaluation.word_count(unrelated["treatment"])
+    manifest_path.write_text(json.dumps(manifest))
+
+    message = _manifest_load_error(tmp_path)
+
+    assert "canonical atomic response arm" in message
+
+
+def test_trial_report_identifies_candidate_and_control_hashes() -> None:
+    """Expose trial identity and paired direction separately from source ablations."""
+    score = {
+        "id": "trial-case",
+        "mode": "trial-atomic",
+        "source_item_ids": [ANTITHESIS_ID],
+        "trial_candidate_hash": "candidate-hash",
+        "control_treatment_hash": "control-hash",
+        "rate_delta_per_1000_words": -1.25,
+        "paired_rate_delta_ci95": (-2.0, -0.5),
+        "mean_control_words": 100.0,
+        "mean_treatment_words": 95.0,
+        "control_instruction_words": 12,
+        "treatment_instruction_words": 10,
+    }
+
+    lines = evaluation._trial_comparison_lines([score])
+
+    assert "## Trial comparisons" in lines
+    assert any("candidate-hash" in line and "control-hash" in line for line in lines)
+    assert any("-1.250" in line for line in lines)
 
 
 def test_job_matrix_reuses_one_baseline_per_prompt_and_seed() -> None:

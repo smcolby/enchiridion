@@ -97,6 +97,23 @@ def test_rule_rendering_omits_one_atomic_directive() -> None:
     assert "No conversational filler or throat-clearing openers" in rendered
 
 
+def test_rule_rendering_replaces_only_one_atomic_directive() -> None:
+    inventory = template.load_inventory()
+    artifact = next(
+        item for item in inventory if item.path == "shared/rules/prose/writing-conventions.md"
+    )
+    source_id = "writing-conventions.rhetoric-and-structure.never-use-the-it-s-not-x-it-s-ea68a7b2"
+    source_item = next(item for item in artifact.items if item.id == source_id)
+    candidate = "State comparisons directly and avoid antithesis-pivot framing."
+    current = template.render_rule_treatment(artifact)
+    original_block = f"- {source_item.text}"
+    prefix, suffix = current.split(original_block, 1)
+
+    rendered = template.render_rule_replacement(artifact, source_id, candidate)
+
+    assert rendered == f"{prefix}- {candidate}{suffix}"
+
+
 def test_rule_rendering_preserves_table_after_one_example_omission() -> None:
     inventory = template.load_inventory()
     artifact = next(

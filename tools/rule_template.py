@@ -512,6 +512,44 @@ def render_rule_treatment(
     return "\n".join(rendered_lines).strip()
 
 
+def render_rule_replacement(
+    artifact: ArtifactInventory, source_item_id: str, replacement: str
+) -> str:
+    """Render one rule body with exactly one directive source range replaced."""
+    if artifact.artifact_type != "rule":
+        raise ValueError(f"cannot render non-rule artifact '{artifact.path}'")
+    item_by_id = {item.id: item for item in artifact.items}
+    item = item_by_id.get(source_item_id)
+    if item is None:
+        raise ValueError(f"unknown source item for '{artifact.path}': {source_item_id}")
+    if item.kind != "directive":
+        raise ValueError(f"trial replacement requires a directive source item: {source_item_id}")
+    if not replacement or "\n" in replacement or "\r" in replacement:
+        raise ValueError("trial replacement must be one non-empty Markdown line")
+    if replacement != replacement.strip():
+        raise ValueError("trial replacement must not contain surrounding whitespace")
+
+    path = REPO / artifact.path
+    raw = path.read_text()
+    frontmatter = FRONTMATTER_RE.match(raw)
+    if frontmatter is None:
+        raise ValueError(f"rule has no frontmatter: {artifact.path}")
+    lines = raw.splitlines()
+    body_start = raw[: frontmatter.end()].count("\n")
+    first_source_line = lines[item.line_start - 1]
+    list_item = LIST_ITEM_RE.match(first_source_line)
+    replacement_line = f"{list_item.group('marker')} {replacement}" if list_item else replacement
+
+    # Replace the parsed source range and retain every surrounding canonical line
+    rendered_lines: list[str] = []
+    for line_number, line in enumerate(lines[body_start:], start=body_start + 1):
+        if line_number == item.line_start:
+            rendered_lines.append(replacement_line)
+        if not item.line_start <= line_number <= item.line_end:
+            rendered_lines.append(line)
+    return "\n".join(rendered_lines).strip()
+
+
 def validate_inventory(inventory: tuple[ArtifactInventory, ...]) -> list[str]:
     """Return structural and global-identity errors for a parsed inventory."""
     errors = [f"{artifact.path}: {error}" for artifact in inventory for error in artifact.errors]

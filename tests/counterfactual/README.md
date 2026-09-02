@@ -90,6 +90,33 @@ canonical restrictions depend on figurative use and part of speech. The expanded
 view includes those terms and their regular inflections as a lexical sensitivity
 measure, so contextual false positives remain possible in that view.
 
+## Trial treatments
+
+A trial candidate is an item-only Markdown file containing one non-empty line of
+directive prose. Do not include a list marker, heading, table row, frontmatter, or
+code fence. Compare the candidate directly with the current canonical directive:
+
+```bash
+python tools/counterfactual_eval.py trial \
+  --source-id <canonical-source-id> \
+  --candidate <candidate.md> \
+  --mode atomic \
+  --seeds 8 \
+  --workers 12
+```
+
+Use `--mode full-rule` to replace only that directive's parsed source range in the
+complete canonical rule. Every surrounding Markdown line remains unchanged. The
+current complete rule becomes the paired control. Trial IDs and response arms are
+content-addressed, and compatible canonical control responses are reused.
+
+A negative treatment-minus-control rate delta favors the candidate. Reports keep
+trial comparisons separate from addition and omission evidence. The selected
+source item's evaluator supplies the primary outcome; unmodified directives remain
+fixed context rather than separate treatments. Candidate text and hashes are
+stored in an immutable case record inside the ignored run manifest, not in a
+committed evaluator case file.
+
 Raw prose, request metadata, scores, and reports live under
 `.counterfactual-artifacts/`. The directory is ignored by git. Cache identity
 includes the Ollama version, model digest, generation settings, prompts, and seed
