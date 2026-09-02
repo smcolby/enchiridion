@@ -383,8 +383,19 @@ def evaluate_filler_opening(text: str) -> list[Occurrence]:
     """Find known filler phrases near the beginning of a response."""
     opening = _visible_prose(text).lstrip()[:400]
     pattern = re.compile(
-        r"\b(?:sure,?\s+here\s+is|it(?:'s| is)\s+worth\s+noting\s+that|"
-        r"in\s+today(?:'s|’s)\s+world)\b",
+        r"\b(?:"
+        r"(?:sure|certainly|absolutely|of\s+course)[,!]?[ \t]+"
+        r"(?:here(?:[’']s|[ \t]+is)\b)?|"
+        r"here(?:[’']s|[ \t]+is)\b|"
+        r"it(?:[’']s|[ \t]+is)[ \t]+(?:worth[ \t]+noting|important[ \t]+to[ \t]+note)"
+        r"[ \t]+that|"
+        r"it[ \t]+should[ \t]+be[ \t]+noted[ \t]+that|"
+        r"before[ \t]+we[ \t]+(?:begin|start)\b|"
+        r"let(?:[’']s|[ \t]+us)[ \t]+(?:begin|start)\b|"
+        r"this[ \t]+(?:report|response|answer|essay)[ \t]+will\b|"
+        r"in[ \t]+this[ \t]+(?:report|response|answer|essay),?[ \t]+(?:i|we)[ \t]+will\b|"
+        r"in[ \t]+today(?:[’']s)[ \t]+world"
+        r")",
         re.IGNORECASE,
     )
     return _matches(opening, pattern)

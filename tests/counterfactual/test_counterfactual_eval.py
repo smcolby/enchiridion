@@ -120,6 +120,21 @@ def test_dash_evaluator_excludes_code_and_markdown_structural_hyphens() -> None:
     assert len(found) == 4
 
 
+def test_filler_evaluator_finds_high_precision_opening_variants() -> None:
+    """Count conversational and scope-setting filler near the response opening."""
+    text = (
+        "Certainly, here is the requested report. "
+        "It is important to note that the topic is broad. "
+        "It should be noted that interpretations differ. "
+        "Before we begin, some context helps. "
+        "This report will examine the evidence."
+    )
+
+    found = evaluation.evaluate_filler_opening(text)
+
+    assert len(found) == 5
+
+
 def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:
     """Restrict opening and conclusion markers to their stated positions."""
     middle = "In summary, this phrase is discussed as an example. "
