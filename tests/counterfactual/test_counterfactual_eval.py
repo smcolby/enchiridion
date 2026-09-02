@@ -131,6 +131,7 @@ def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None
     assert score["control_occurrences"] == 0
     assert score["treatment_occurrences"] == len(case.prompts)
     assert score["rate_delta_per_1000_words"] > 0
+    assert score["exposure_status"] == "treatment-only-exposure"
 
 
 def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> None:
@@ -155,6 +156,7 @@ def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> 
     assert loaded_prompts == prompts
     assert loaded_cases == {first.id: first, second.id: second}
     assert loaded_seeds == (101,)
+    assert "- Model digest: `test-digest`" in evaluation._provenance_lines(tmp_path)
 
 
 def test_stale_evaluator_binding_fails_before_generation(monkeypatch: _MonkeyPatch) -> None:
@@ -216,6 +218,8 @@ def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) ->
     scores = json.loads((tmp_path / "scores.json").read_text())
     report = report_path.read_text()
     assert [score["id"] for score in scores] == [complete_case.id]
+    assert "## Source-item comparison" in report
+    assert "zero-exposure-uninformative" in report
     assert "## Pending cases" in report
 
 

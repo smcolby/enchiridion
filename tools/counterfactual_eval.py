@@ -1028,14 +1028,25 @@ def _score_case(
     treatment_rate = treatment_occurrences * 1000 / max(1, treatment_words)
     reduction = (control_rate - treatment_rate) / control_rate if control_rate > 0 else None
     interval = _bootstrap_delta_interval(pairs)
+    if control_occurrences > 0:
+        exposure_status = "control-exposure-observed"
+    elif treatment_occurrences > 0:
+        exposure_status = "treatment-only-exposure"
+    else:
+        exposure_status = "zero-exposure-uninformative"
     return {
         "id": case.id,
         "kind": case.kind,
         "mode": case.mode,
+        "evaluator": case.evaluator,
+        "source_item_ids": list(case.source_item_ids),
+        "source_hashes": [source_id.rsplit("-", 1)[-1] for source_id in case.source_item_ids],
+        "treatment_hash": case.treatment_hash,
         "control_arm": case.control_arm,
         "treatment_arm": treatment_arm,
         "parent": case.parent,
         "evidence": case.evidence,
+        "exposure_status": exposure_status,
         "documents": len(pairs),
         "control_occurrences": control_occurrences,
         "treatment_occurrences": treatment_occurrences,
@@ -1066,6 +1077,70 @@ def _missing_case_responses(
     return missing
 
 
+def _source_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
+    """Render addition and omission effects beside their shared source item."""
+    comparisons: dict[str, dict[str, dict[str, Any]]] = {}
+    for score in scores:
+        source_ids = score.get("source_item_ids", [])
+        mode = score.get("mode")
+        if len(source_ids) != 1 or mode not in {"one-at-a-time", "exemplar", "leave-one-out"}:
+            continue
+        column = "omission" if mode == "leave-one-out" else "addition"
+        comparisons.setdefault(source_ids[0], {})[column] = score
+    if not comparisons:
+        return []
+
+    lines = [
+        "",
+        "## Source-item comparison",
+        "",
+        "| Source item | Addition rate delta | Omission rate delta | Addition exposure | "
+        "Omission exposure | Evidence |",
+        "|---|---:|---:|---|---|---|",
+    ]
+    for source_id, comparison in sorted(comparisons.items()):
+        addition = comparison.get("addition")
+        omission = comparison.get("omission")
+        addition_delta = f"{addition['rate_delta_per_1000_words']:.3f}" if addition else "pending"
+        omission_delta = f"{omission['rate_delta_per_1000_words']:.3f}" if omission else "pending"
+        addition_exposure = addition["exposure_status"] if addition else "pending"
+        omission_exposure = omission["exposure_status"] if omission else "pending"
+        evidence = (addition or omission or {}).get("evidence") or "none"
+        lines.append(
+            f"| `{source_id}` | {addition_delta} | {omission_delta} | "
+            f"{addition_exposure} | {omission_exposure} | {evidence} |"
+        )
+    return lines
+
+
+def _provenance_lines(run_dir: Path) -> list[str]:
+    """Render generation and evaluator provenance from an available manifest."""
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return []
+    manifest = _require_mapping(json.loads(manifest_path.read_text()), "manifest")
+    config = _require_mapping(manifest.get("config"), "manifest.config")
+    server = _require_mapping(manifest.get("server"), "manifest.server")
+    prompt_ids = [item.get("id") for item in manifest.get("prompts", []) if isinstance(item, dict)]
+    settings = ", ".join(
+        f"{key}={config.get(key)}"
+        for key in ("temperature", "top_p", "num_ctx", "num_predict", "think")
+    )
+    return [
+        "",
+        "## Provenance",
+        "",
+        f"- Repository commits: {', '.join(manifest.get('repository_commits', []))}",
+        f"- Model: `{config.get('model')}`",
+        f"- Model digest: `{server.get('model_digest')}`",
+        f"- Ollama: `{server.get('ollama_version')}`",
+        f"- Evaluator versions: {', '.join(manifest.get('evaluator_versions', []))}",
+        f"- Prompts: {', '.join(str(item) for item in prompt_ids)}",
+        f"- Seeds: {', '.join(str(seed) for seed in config.get('seeds', []))}",
+        f"- Generation settings: {settings}",
+    ]
+
+
 def write_report(
     run_dir: Path,
     prompts: dict[str, PromptSpec],
@@ -1090,8 +1165,8 @@ def write_report(
         f"Run: `{run_dir.name}`",
         "",
         "| Case | Mode | Control count | Treatment count | Control / 1k words | "
-        "Treatment / 1k words | Rate delta | Relative reduction | 95% CI |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "Treatment / 1k words | Rate delta | Relative reduction | 95% CI | Exposure |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for score in scores:
         reduction = score["relative_rate_reduction"]
@@ -1103,9 +1178,10 @@ def write_report(
             f"{score['control_rate_per_1000_words']:.3f} | "
             f"{score['treatment_rate_per_1000_words']:.3f} | "
             f"{score['rate_delta_per_1000_words']:.3f} | {reduction_text} | "
-            f"[{lower:.3f}, {upper:.3f}] |"
+            f"[{lower:.3f}, {upper:.3f}] | {score['exposure_status']} |"
         )
 
+    lines.extend(_source_comparison_lines(scores))
     if pending:
         lines.extend(["", "## Pending cases", ""])
         lines.extend(
@@ -1121,6 +1197,7 @@ def write_report(
             "",
         ]
     )
+    lines.extend(_provenance_lines(run_dir))
     report_path = run_dir / "report.md"
     _atomic_write(report_path, "\n".join(lines))
     return report_path
