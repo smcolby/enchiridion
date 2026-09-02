@@ -13,6 +13,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import http.client
+import inspect
 import json
 import re
 import sys
@@ -502,6 +503,17 @@ SCREENING_BINDINGS = (
 )
 
 
+def evaluator_version() -> str:
+    """Hash evaluator implementations and bindings for report provenance."""
+    identity = {
+        "evaluators": {
+            name: inspect.getsource(evaluator) for name, evaluator in sorted(EVALUATORS.items())
+        },
+        "bindings": [asdict(binding) for binding in SCREENING_BINDINGS],
+    }
+    return _stable_hash(identity)[:16]
+
+
 def _request_json(
     server: str,
     path: str,
@@ -688,6 +700,18 @@ def _run_job(run_dir: Path, config: ExperimentConfig, job: Job) -> str:
     return "generated"
 
 
+def _manifest_compatibility_fields(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Extract generation fields that must remain fixed within one response store."""
+    config = dict(_require_mapping(manifest.get("config"), "manifest.config"))
+    config.pop("workers", None)
+    config.pop("timeout_seconds", None)
+    return {
+        "config": config,
+        "server": manifest.get("server"),
+        "prompts": manifest.get("prompts"),
+    }
+
+
 def _write_manifest(
     run_dir: Path,
     config: ExperimentConfig,
@@ -696,15 +720,47 @@ def _write_manifest(
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
 ) -> None:
-    """Record all inputs needed to interpret and reproduce an experiment."""
-    manifest = {
-        "repository_commit": _git_commit(),
+    """Create or merge an immutable-compatible response-store manifest."""
+    commit = _git_commit()
+    version = evaluator_version()
+    manifest_path = run_dir / "manifest.json"
+    proposed: dict[str, Any] = {
+        "repository_commit": commit,
+        "repository_commits": [commit],
+        "evaluator_versions": [version],
         "config": {**asdict(config), "seeds": list(seeds)},
         "server": asdict(metadata),
         "prompts": [asdict(prompts[key]) for key in sorted(prompts)],
         "cases": [asdict(cases[key]) for key in sorted(cases)],
     }
-    _atomic_write(run_dir / "manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    if not manifest_path.is_file():
+        _atomic_write(manifest_path, json.dumps(proposed, indent=2, sort_keys=True) + "\n")
+        return
+
+    existing = _require_mapping(json.loads(manifest_path.read_text()), "manifest")
+    if _manifest_compatibility_fields(existing) != _manifest_compatibility_fields(proposed):
+        raise ValueError(f"incompatible experiment manifest: {manifest_path}")
+
+    existing_cases = {
+        _require_string(item.get("id"), "manifest case id"): item
+        for item in existing.get("cases", [])
+        if isinstance(item, dict)
+    }
+    for case in proposed["cases"]:
+        case_id = _require_string(case.get("id"), "manifest case id")
+        previous = existing_cases.get(case_id)
+        if previous is not None and _stable_hash(previous) != _stable_hash(case):
+            raise ValueError(f"case '{case_id}' changed within experiment manifest")
+        existing_cases[case_id] = case
+
+    commits = set(existing.get("repository_commits", [existing.get("repository_commit")]))
+    commits.add(commit)
+    versions = set(existing.get("evaluator_versions", []))
+    versions.add(version)
+    existing["repository_commits"] = sorted(item for item in commits if isinstance(item, str))
+    existing["evaluator_versions"] = sorted(item for item in versions if isinstance(item, str))
+    existing["cases"] = [existing_cases[key] for key in sorted(existing_cases)]
+    _atomic_write(manifest_path, json.dumps(existing, indent=2, sort_keys=True) + "\n")
 
 
 def _git_commit() -> str:

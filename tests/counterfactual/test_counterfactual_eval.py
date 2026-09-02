@@ -71,6 +71,26 @@ def test_job_matrix_reuses_one_baseline_per_prompt_and_seed() -> None:
     assert len(baseline_keys) == len(baseline_jobs)
 
 
+def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> None:
+    """Preserve compatible case inventories when several selections share a run."""
+    config = evaluation.load_config()
+    prompts = evaluation.load_prompts()
+    cases = evaluation.load_cases()
+    first, second = list(cases.values())[:2]
+    metadata = evaluation.ServerMetadata(
+        ollama_version="test-version",
+        model_digest="test-digest",
+    )
+
+    evaluation._write_manifest(tmp_path, config, metadata, prompts, {first.id: first}, (101,))
+    evaluation._write_manifest(tmp_path, config, metadata, prompts, {second.id: second}, (101,))
+
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    case_ids = {case["id"] for case in manifest["cases"]}
+    assert case_ids == {first.id, second.id}
+    assert manifest["evaluator_versions"] == [evaluation.evaluator_version()]
+
+
 def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) -> None:
     """Generate useful scoring output before every treatment arm finishes."""
     prompts = evaluation.load_prompts()
