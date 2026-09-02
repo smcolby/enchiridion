@@ -863,14 +863,35 @@ def _score_case(
     }
 
 
+def _missing_case_responses(
+    run_dir: Path, case: EvaluationCase, seeds: tuple[int, ...]
+) -> list[str]:
+    """List missing paired response keys that prevent scoring one case."""
+    missing: list[str] = []
+    for prompt_id in case.prompts:
+        for seed in seeds:
+            for arm in ("baseline", case.id):
+                path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
+                if not path.is_file():
+                    missing.append(f"{arm}/{prompt_id}/{seed}")
+    return missing
+
+
 def write_report(
     run_dir: Path,
     prompts: dict[str, PromptSpec],
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
 ) -> Path:
-    """Score all cases and write machine-readable and Markdown reports."""
-    scores = [_score_case(run_dir, case, prompts, seeds) for case in cases.values()]
+    """Score complete cases and identify arms still pending in a partial run."""
+    scores: list[dict[str, Any]] = []
+    pending: dict[str, list[str]] = {}
+    for case in cases.values():
+        missing = _missing_case_responses(run_dir, case, seeds)
+        if missing:
+            pending[case.id] = missing
+            continue
+        scores.append(_score_case(run_dir, case, prompts, seeds))
     scores.sort(key=lambda item: item["id"])
     _atomic_write(run_dir / "scores.json", json.dumps(scores, indent=2, sort_keys=True) + "\n")
 
@@ -895,6 +916,12 @@ def write_report(
             f"[{lower:.3f}, {upper:.3f}] |"
         )
 
+    if pending:
+        lines.extend(["", "## Pending cases", ""])
+        lines.extend(
+            f"- `{case_id}`: {len(missing)} missing paired responses"
+            for case_id, missing in sorted(pending.items())
+        )
     lines.extend(
         [
             "",

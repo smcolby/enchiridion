@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Protocol
@@ -68,6 +69,27 @@ def test_job_matrix_reuses_one_baseline_per_prompt_and_seed() -> None:
 
     assert len(baseline_jobs) == len(prompts) * len(seeds)
     assert len(baseline_keys) == len(baseline_jobs)
+
+
+def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) -> None:
+    """Generate useful scoring output before every treatment arm finishes."""
+    prompts = evaluation.load_prompts()
+    all_cases = evaluation.load_cases()
+    selected_cases = dict(list(all_cases.items())[:2])
+    complete_case = next(iter(selected_cases.values()))
+    seed = 101
+    for prompt_id in complete_case.prompts:
+        for arm in ("baseline", complete_case.id):
+            path = tmp_path / "responses" / arm / prompt_id / f"{seed}.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("Neutral prose without a measured construction.")
+
+    report_path = evaluation.write_report(tmp_path, prompts, selected_cases, (seed,))
+
+    scores = json.loads((tmp_path / "scores.json").read_text())
+    report = report_path.read_text()
+    assert [score["id"] for score in scores] == [complete_case.id]
+    assert "## Pending cases" in report
 
 
 def test_latest_run_ignores_non_experiment_artifact_directories(
