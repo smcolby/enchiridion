@@ -103,14 +103,21 @@ def test_antithesis_evaluator_finds_variants_and_ignores_plain_contrast() -> Non
     assert len(found) == 5
 
 
-def test_dash_evaluator_excludes_markdown_code() -> None:
-    """Apply prose punctuation checks outside fenced and inline code regions."""
-    text = "Prose — interruption. `git log --oneline`\n```text\na -- b\n```"
+def test_dash_evaluator_excludes_code_and_markdown_structural_hyphens() -> None:
+    """Count prose dashes without counting code, options, comments, or separators."""
+    text = (
+        "Prose — interruption. Range 5–10. Words--joined. Text -- aside.\n"
+        "---\n"
+        "|---|---|\n"
+        "Run tool --verbose now.\n"
+        "<!-- hidden -- comment -->\n"
+        "`git log --oneline`\n"
+        "```text\na -- b\n```"
+    )
 
     found = evaluation.evaluate_dash_interruption(text)
 
-    assert len(found) == 1
-    assert found[0].snippet == "Prose — interruption."
+    assert len(found) == 4
 
 
 def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:

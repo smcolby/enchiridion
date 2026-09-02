@@ -35,6 +35,12 @@ ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 WORD_RE = re.compile(r"\b[\w’'-]+\b", re.UNICODE)
 FENCED_CODE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.DOTALL)
 INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+MARKDOWN_HYPHEN_STRUCTURE_RE = re.compile(
+    r"^[ \t]*(?:-{3,}|(?:\|[ \t]*:?-{3,}:?[ \t]*)+\|)[ \t]*$",
+    re.MULTILINE,
+)
+CLI_LONG_OPTION_RE = re.compile(r"(?<!\S)--[a-z][\w-]*(?:=[^\s]+)?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -324,9 +330,10 @@ def instruction_for_case(
 
 
 def _visible_prose(text: str) -> str:
-    """Remove Markdown code regions that prose directives explicitly exempt."""
+    """Remove Markdown code and comment regions that prose directives exempt."""
     without_fences = FENCED_CODE_RE.sub(" ", text)
-    return INLINE_CODE_RE.sub(" ", without_fences)
+    without_inline_code = INLINE_CODE_RE.sub(" ", without_fences)
+    return HTML_COMMENT_RE.sub(" ", without_inline_code)
 
 
 def _matches(text: str, pattern: re.Pattern[str]) -> list[Occurrence]:
@@ -361,8 +368,15 @@ def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
 
 
 def evaluate_dash_interruption(text: str) -> list[Occurrence]:
-    """Find em-dashes, en-dashes, and sequential hyphens outside code."""
-    return _matches(_visible_prose(text), re.compile(r"—|–|--"))
+    """Find prose dashes while excluding Markdown structure and CLI options."""
+    prose = _visible_prose(text)
+    without_structures = MARKDOWN_HYPHEN_STRUCTURE_RE.sub(
+        lambda match: " " * len(match.group()), prose
+    )
+    without_options = CLI_LONG_OPTION_RE.sub(
+        lambda match: " " * len(match.group()), without_structures
+    )
+    return _matches(without_options, re.compile(r"—|–|-{2,}"))
 
 
 def evaluate_filler_opening(text: str) -> list[Occurrence]:
