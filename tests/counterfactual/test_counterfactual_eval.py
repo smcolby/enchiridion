@@ -380,14 +380,28 @@ def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:
 
 
 def test_paired_bootstrap_varies_and_remains_reproducible() -> None:
-    """Resample pairs with replacement without losing deterministic reports."""
-    pairs = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (0.0, 2.0)]
+    """Resample paired count totals without losing deterministic reports."""
+    pairs = [
+        (0, 100, 0, 100),
+        (0, 100, 1, 100),
+        (1, 100, 0, 100),
+        (0, 100, 2, 100),
+    ]
 
     first = evaluation._bootstrap_delta_interval(pairs, samples=1000)
     second = evaluation._bootstrap_delta_interval(pairs, samples=1000)
 
     assert first == second
     assert first[0] < first[1]
+
+
+def test_pooled_rate_delta_uses_the_same_estimand_as_the_report() -> None:
+    """Weight paired occurrence rates by each arm's total generated words."""
+    pairs = [(1, 100, 0, 1000), (0, 100, 1, 100)]
+
+    delta = evaluation._pooled_rate_delta(pairs)
+
+    assert abs(delta - (-4.0909090909)) < 1e-9
 
 
 def test_banned_vocabulary_evaluator_is_case_insensitive() -> None:

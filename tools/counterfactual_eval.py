@@ -131,6 +131,7 @@ class Occurrence:
 
 
 Evaluator = Callable[[str], list[Occurrence]]
+PairedCounts = tuple[int, int, int, int]
 
 
 def _require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -1068,23 +1069,33 @@ def _read_response(run_dir: Path, arm: str, prompt_id: str, seed: int) -> str:
     return path.read_text()
 
 
+def _pooled_rate_delta(pairs: list[PairedCounts]) -> float:
+    """Calculate treatment minus control using pooled occurrence and word totals."""
+    control_occurrences = sum(pair[0] for pair in pairs)
+    control_words = sum(pair[1] for pair in pairs)
+    treatment_occurrences = sum(pair[2] for pair in pairs)
+    treatment_words = sum(pair[3] for pair in pairs)
+    control_rate = control_occurrences * 1000 / max(1, control_words)
+    treatment_rate = treatment_occurrences * 1000 / max(1, treatment_words)
+    return treatment_rate - control_rate
+
+
 def _bootstrap_delta_interval(
-    pairs: list[tuple[float, float]], samples: int = 5000
+    pairs: list[PairedCounts], samples: int = 5000
 ) -> tuple[float, float]:
-    """Estimate a deterministic paired-bootstrap interval for treatment minus baseline."""
+    """Estimate a paired-bootstrap interval for the pooled treatment-control rate delta."""
     if not pairs:
         return 0.0, 0.0
 
     # Counter-addressed hashes produce reproducible draws without a global random state
     deltas: list[float] = []
     for sample_index in range(samples):
-        selected: list[tuple[float, float]] = []
+        selected: list[PairedCounts] = []
         for draw_index in range(len(pairs)):
             address = f"20260831:{sample_index}:{draw_index}".encode()
             draw = int.from_bytes(hashlib.sha256(address).digest()[:8]) % len(pairs)
             selected.append(pairs[draw])
-        delta = sum(treatment - baseline for baseline, treatment in selected) / len(selected)
-        deltas.append(delta)
+        deltas.append(_pooled_rate_delta(selected))
     deltas.sort()
     return deltas[int(samples * 0.025)], deltas[int(samples * 0.975)]
 
@@ -1104,10 +1115,10 @@ def _score_case(
     treatment_words = 0
     control_documents = 0
     treatment_documents = 0
-    pairs: list[tuple[float, float]] = []
+    pairs: list[PairedCounts] = []
     strict_control_occurrences = 0
     strict_treatment_occurrences = 0
-    strict_pairs: list[tuple[float, float]] = []
+    strict_pairs: list[PairedCounts] = []
     snippets: list[str] = []
     treatment_arm = _case_treatment_arm(case)
 
@@ -1132,8 +1143,10 @@ def _score_case(
             treatment_documents += int(bool(treatment_found))
             pairs.append(
                 (
-                    control_count * 1000 / control_word_count,
-                    treatment_count * 1000 / treatment_word_count,
+                    control_count,
+                    control_word_count,
+                    treatment_count,
+                    treatment_word_count,
                 )
             )
             if strict_evaluator is not None:
@@ -1143,8 +1156,10 @@ def _score_case(
                 strict_treatment_occurrences += strict_treatment_count
                 strict_pairs.append(
                     (
-                        strict_control_count * 1000 / control_word_count,
-                        strict_treatment_count * 1000 / treatment_word_count,
+                        strict_control_count,
+                        control_word_count,
+                        strict_treatment_count,
+                        treatment_word_count,
                     )
                 )
             if len(snippets) < 3:
