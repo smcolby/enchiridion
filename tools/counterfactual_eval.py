@@ -443,6 +443,23 @@ def _matches(text: str, pattern: re.Pattern[str]) -> list[Occurrence]:
     return occurrences
 
 
+def evaluate_antithesis_pivot_strict(text: str) -> list[Occurrence]:
+    """Find only the antithesis forms explicitly named by the canonical directive."""
+    prose = _visible_prose(text)
+    pronoun = r"(?:it|this|that)"
+    negative = (
+        rf"(?:{pronoun}[ \t]+(?:(?:is|was)[ \t]+not|(?:isn|wasn)[’']t)|"
+        rf"{pronoun}[’']s[ \t]+not)"
+    )
+    positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)"
+    pattern = re.compile(
+        rf"\b{negative}\b[^.!?\n]{{1,140}}?[,;:][ \t]*{positive}\b|"
+        r"\bnot[ \t]+just\b[^.!?\n]{1,140}?\bbut\b",
+        re.IGNORECASE,
+    )
+    return _matches(prose, pattern)
+
+
 def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
     """Find high-precision grammatical variants of antithesis pivots."""
     prose = _visible_prose(text)
@@ -476,6 +493,17 @@ def evaluate_dash_interruption(text: str) -> list[Occurrence]:
     return _matches(without_options, re.compile(r"—|–|-{2,}"))
 
 
+def evaluate_filler_opening_strict(text: str) -> list[Occurrence]:
+    """Find only filler openings explicitly named by the canonical directive."""
+    opening = _visible_prose(text).lstrip()[:400]
+    pattern = re.compile(
+        r"\b(?:sure,?[ \t]+here[ \t]+is|it(?:[’']s|[ \t]+is)[ \t]+worth[ \t]+"
+        r"noting[ \t]+that|in[ \t]+today(?:[’']s)[ \t]+world)\b",
+        re.IGNORECASE,
+    )
+    return _matches(opening, pattern)
+
+
 def evaluate_filler_opening(text: str) -> list[Occurrence]:
     """Find known filler phrases near the beginning of a response."""
     opening = _visible_prose(text).lstrip()[:400]
@@ -498,6 +526,21 @@ def evaluate_filler_opening(text: str) -> list[Occurrence]:
     return _matches(opening, pattern)
 
 
+def evaluate_concluding_summary_strict(text: str) -> list[Occurrence]:
+    """Find only conclusion markers explicitly named by the canonical directive."""
+    prose = _visible_prose(text)
+    offset = max(0, len(prose) - 800)
+    pattern = re.compile(
+        r"\b(?:ultimately|in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all)\b",
+        re.IGNORECASE,
+    )
+    found = _matches(prose[offset:], pattern)
+    return [
+        Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
+        for item in found
+    ]
+
+
 def evaluate_concluding_summary(text: str) -> list[Occurrence]:
     """Find unprompted summary markers near the end of a response."""
     prose = _visible_prose(text)
@@ -513,6 +556,25 @@ def evaluate_concluding_summary(text: str) -> list[Occurrence]:
         Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
         for item in found
     ]
+
+
+def evaluate_banned_vocabulary_strict(text: str) -> list[Occurrence]:
+    """Find only the exact vocabulary forms listed by the canonical directive."""
+    words = (
+        "delve",
+        "tapestry",
+        "beacon",
+        "testament",
+        "symphony",
+        "pivotal",
+        "landscape",
+        "realm",
+        "navigate",
+        "leverage",
+        "seamless",
+    )
+    pattern = re.compile(rf"\b(?:{'|'.join(words)})\b", re.IGNORECASE)
+    return _matches(_visible_prose(text), pattern)
 
 
 def evaluate_banned_vocabulary(text: str) -> list[Occurrence]:
@@ -540,6 +602,12 @@ EVALUATORS: dict[str, Evaluator] = {
     "filler-opening": evaluate_filler_opening,
     "concluding-summary": evaluate_concluding_summary,
     "banned-vocabulary": evaluate_banned_vocabulary,
+}
+STRICT_EVALUATORS: dict[str, Evaluator] = {
+    "antithesis-pivot": evaluate_antithesis_pivot_strict,
+    "filler-opening": evaluate_filler_opening_strict,
+    "concluding-summary": evaluate_concluding_summary_strict,
+    "banned-vocabulary": evaluate_banned_vocabulary_strict,
 }
 ALL_PROMPT_IDS = (
     "history-fall-of-rome",
@@ -604,6 +672,10 @@ def evaluator_version() -> str:
     identity = {
         "evaluators": {
             name: inspect.getsource(evaluator) for name, evaluator in sorted(EVALUATORS.items())
+        },
+        "strict_evaluators": {
+            name: inspect.getsource(evaluator)
+            for name, evaluator in sorted(STRICT_EVALUATORS.items())
         },
         "bindings": [asdict(binding) for binding in SCREENING_BINDINGS],
     }
@@ -986,6 +1058,7 @@ def _score_case(
 ) -> dict[str, Any]:
     """Score one treatment against its matched control response arm."""
     evaluator = EVALUATORS[case.evaluator]
+    strict_evaluator = STRICT_EVALUATORS.get(case.evaluator)
     control_occurrences = 0
     treatment_occurrences = 0
     control_words = 0
@@ -993,6 +1066,9 @@ def _score_case(
     control_documents = 0
     treatment_documents = 0
     pairs: list[tuple[float, float]] = []
+    strict_control_occurrences = 0
+    strict_treatment_occurrences = 0
+    strict_pairs: list[tuple[float, float]] = []
     snippets: list[str] = []
     treatment_arm = _case_treatment_arm(case)
 
@@ -1021,6 +1097,17 @@ def _score_case(
                     treatment_count * 1000 / treatment_word_count,
                 )
             )
+            if strict_evaluator is not None:
+                strict_control_count = len(strict_evaluator(control))
+                strict_treatment_count = len(strict_evaluator(treatment))
+                strict_control_occurrences += strict_control_count
+                strict_treatment_occurrences += strict_treatment_count
+                strict_pairs.append(
+                    (
+                        strict_control_count * 1000 / control_word_count,
+                        strict_treatment_count * 1000 / treatment_word_count,
+                    )
+                )
             if len(snippets) < 3:
                 snippets.extend(item.snippet for item in treatment_found[: 3 - len(snippets)])
 
@@ -1028,6 +1115,18 @@ def _score_case(
     treatment_rate = treatment_occurrences * 1000 / max(1, treatment_words)
     reduction = (control_rate - treatment_rate) / control_rate if control_rate > 0 else None
     interval = _bootstrap_delta_interval(pairs)
+    strict_view: dict[str, Any] | None = None
+    if strict_evaluator is not None:
+        strict_control_rate = strict_control_occurrences * 1000 / max(1, control_words)
+        strict_treatment_rate = strict_treatment_occurrences * 1000 / max(1, treatment_words)
+        strict_view = {
+            "control_occurrences": strict_control_occurrences,
+            "treatment_occurrences": strict_treatment_occurrences,
+            "control_rate_per_1000_words": strict_control_rate,
+            "treatment_rate_per_1000_words": strict_treatment_rate,
+            "rate_delta_per_1000_words": strict_treatment_rate - strict_control_rate,
+            "paired_rate_delta_ci95": _bootstrap_delta_interval(strict_pairs),
+        }
     if control_occurrences > 0:
         exposure_status = "control-exposure-observed"
     elif treatment_occurrences > 0:
@@ -1059,6 +1158,7 @@ def _score_case(
         "mean_control_words": control_words / max(1, len(pairs)),
         "mean_treatment_words": treatment_words / max(1, len(pairs)),
         "paired_rate_delta_ci95": interval,
+        "strict_view": strict_view,
         "treatment_snippets": snippets[:3],
     }
 
@@ -1075,6 +1175,31 @@ def _missing_case_responses(
                 if not path.is_file():
                     missing.append(f"{arm}/{prompt_id}/{seed}")
     return missing
+
+
+def _sensitivity_lines(scores: list[dict[str, Any]]) -> list[str]:
+    """Render strict and expanded evaluator views without discarding either."""
+    available = [score for score in scores if score.get("strict_view") is not None]
+    if not available:
+        return []
+    lines = [
+        "",
+        "## Strict and expanded evaluator views",
+        "",
+        "| Case | Strict control | Strict treatment | Strict delta | Expanded control | "
+        "Expanded treatment | Expanded delta |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for score in available:
+        strict = score["strict_view"]
+        lines.append(
+            f"| `{score['id']}` | {strict['control_occurrences']} | "
+            f"{strict['treatment_occurrences']} | "
+            f"{strict['rate_delta_per_1000_words']:.3f} | "
+            f"{score['control_occurrences']} | {score['treatment_occurrences']} | "
+            f"{score['rate_delta_per_1000_words']:.3f} |"
+        )
+    return lines
 
 
 def _source_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
@@ -1181,6 +1306,7 @@ def write_report(
             f"[{lower:.3f}, {upper:.3f}] | {score['exposure_status']} |"
         )
 
+    lines.extend(_sensitivity_lines(scores))
     lines.extend(_source_comparison_lines(scores))
     if pending:
         lines.extend(["", "## Pending cases", ""])

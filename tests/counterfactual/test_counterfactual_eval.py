@@ -132,6 +132,7 @@ def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None
     assert score["treatment_occurrences"] == len(case.prompts)
     assert score["rate_delta_per_1000_words"] > 0
     assert score["exposure_status"] == "treatment-only-exposure"
+    assert score["strict_view"]["treatment_occurrences"] == len(case.prompts)
 
 
 def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> None:
@@ -218,6 +219,7 @@ def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) ->
     scores = json.loads((tmp_path / "scores.json").read_text())
     report = report_path.read_text()
     assert [score["id"] for score in scores] == [complete_case.id]
+    assert "## Strict and expanded evaluator views" in report
     assert "## Source-item comparison" in report
     assert "zero-exposure-uninformative" in report
     assert "## Pending cases" in report
@@ -254,6 +256,23 @@ def test_antithesis_evaluator_finds_variants_and_ignores_plain_contrast() -> Non
     found = evaluation.evaluate_antithesis_pivot(text)
 
     assert len(found) == 5
+
+
+def test_strict_views_preserve_canonical_surface_form_boundaries() -> None:
+    """Keep exact directive forms visible beside broader sensitivity matches."""
+    antithesis = "It's not delay, it's uncertainty. It is not speed, but rather consistency."
+    filler = "Sure, here is the report. This report will examine the evidence."
+    conclusion = "In summary, one result dominates. To conclude, caution remains."
+    vocabulary = "We delve into a topic while delving through several landscapes."
+
+    assert len(evaluation.evaluate_antithesis_pivot_strict(antithesis)) == 1
+    assert len(evaluation.evaluate_antithesis_pivot(antithesis)) == 2
+    assert len(evaluation.evaluate_filler_opening_strict(filler)) == 1
+    assert len(evaluation.evaluate_filler_opening(filler)) == 2
+    assert len(evaluation.evaluate_concluding_summary_strict(conclusion)) == 1
+    assert len(evaluation.evaluate_concluding_summary(conclusion)) == 2
+    assert len(evaluation.evaluate_banned_vocabulary_strict(vocabulary)) == 1
+    assert len(evaluation.evaluate_banned_vocabulary(vocabulary)) == 3
 
 
 def test_dash_evaluator_excludes_code_and_markdown_structural_hyphens() -> None:
