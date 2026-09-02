@@ -1,0 +1,61 @@
+# Counterfactual rule evaluation
+
+This suite measures whether individual catalog directives change the behavior of
+the pinned `qwen3.8:27b-iq4xs` model when called through Ollama's native API. It
+does not load instructions, skills, agents, or settings from any coding harness.
+
+## Experimental arms
+
+Every prompt and seed has one shared baseline. Declarative case files then add one
+instruction to the same base system message. Three treatment kinds are supported:
+
+- `directive`: one atomic instruction from a canonical block or rule
+- `anti-hallucination`: one banned/correct exemplar pair linked to its parent
+  directive
+- `composite`: a parent directive and exemplar together, used to measure whether
+  the example adds value in the context where it is deployed
+
+Anti-hallucination rows are tested one at a time. They remain a distinct evidence
+class because many record a failure observed in real work. A zero ecological
+baseline does not erase that provenance. Compare the exemplar arm with both its
+parent directive and their composite before deciding whether the row is useful.
+
+Each case stores a normalized snapshot of its canonical source. The inventory
+check fails when that text disappears or becomes ambiguous, forcing changed rules
+to receive a new evaluation.
+
+## Commands
+
+Validate source mappings and evaluator names without contacting Ollama:
+
+```bash
+python tools/counterfactual_eval.py inventory
+```
+
+Estimate the screening matrix:
+
+```bash
+python tools/counterfactual_eval.py estimate --seeds 8
+```
+
+Run up to 12 concurrent HTTP requests. Ollama queues them while the model processes
+available work:
+
+```bash
+python tools/counterfactual_eval.py run --seeds 8
+```
+
+Regenerate a report from the latest completed run:
+
+```bash
+python tools/counterfactual_eval.py report
+```
+
+Raw prose, request metadata, scores, and reports live under
+`.counterfactual-artifacts/`. The directory is ignored by git. Cache identity
+includes the Ollama version, model digest, generation settings, prompts, and seed
+matrix. A model or prompt change therefore creates a new baseline automatically.
+
+Pytest covers inventory and evaluator behavior without network access. The online
+experiment is intentionally excluded from pre-commit because it is long-running
+and stochastic.

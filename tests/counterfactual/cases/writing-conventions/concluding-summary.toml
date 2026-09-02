@@ -1,0 +1,12 @@
+id = "writing-conventions.concluding-summary"
+kind = "directive"
+source = "shared/rules/prose/writing-conventions.md"
+section = "Rhetoric and structure"
+source_match = """
+No unprompted concluding summary ("Ultimately", "In conclusion", "In summary", "All in all"); stop when the point is made.
+"""
+instruction = """
+No unprompted concluding summary ("Ultimately", "In conclusion", "In summary", "All in all"); stop when the point is made.
+"""
+evaluator = "concluding-summary"
+prompts = ["history-fall-of-rome", "science-pregnane-x-receptor", "technical-llm-architecture", "creative-time-dilated-door"]

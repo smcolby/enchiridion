@@ -1,0 +1,13 @@
+id = "writing-conventions.antithesis-pivot-exemplar"
+kind = "anti-hallucination"
+source = "shared/rules/prose/writing-conventions.md"
+section = "Anti-hallucination"
+source_match = """
+| `It's not a hyperparameter, it's a design choice` | `It is a design choice, not a hyperparameter` |
+"""
+banned = "It's not a hyperparameter, it's a design choice"
+correct = "It is a design choice, not a hyperparameter"
+parent = "writing-conventions.antithesis-pivot"
+evidence = "observed-failure"
+evaluator = "antithesis-pivot"
+prompts = ["history-fall-of-rome", "science-pregnane-x-receptor", "technical-llm-architecture", "creative-time-dilated-door"]

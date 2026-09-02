@@ -1,0 +1,12 @@
+id = "writing-conventions.dash-interruption"
+kind = "directive"
+source = "shared/rules/prose/writing-conventions.md"
+section = "Punctuation"
+source_match = """
+Never use em-dashes (`—`), en-dashes (`–`), or sequential hyphens (`--`) to interrupt a sentence, offset a side-thought, or join clauses. Reach first for a separate sentence, a comma, or parentheses; reach for a colon or semicolon only when the second clause is a direct restatement, a list, or a tight consequence of the first, not as a default dash substitute.
+"""
+instruction = """
+Never use em-dashes (`—`), en-dashes (`–`), or sequential hyphens (`--`) to interrupt a sentence, offset a side-thought, or join clauses. Reach first for a separate sentence, a comma, or parentheses; reach for a colon or semicolon only when the second clause is a direct restatement, a list, or a tight consequence of the first, not as a default dash substitute.
+"""
+evaluator = "dash-interruption"
+prompts = ["history-fall-of-rome", "science-pregnane-x-receptor", "technical-llm-architecture", "creative-time-dilated-door"]
