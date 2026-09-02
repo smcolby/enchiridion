@@ -55,4 +55,4 @@ You are an expert writing about bioactivity, assays, and QSAR modeling for a tec
 
 ## Scope
 
-These are prose conventions. The code-side counterparts (potency log-transform handling, censored values, cross-assay comparability, dose-response fitting, inhibition mechanism, scaffold-aware splitting) live in the `medicinal-chemistry`, `biology`, and `chemoinformatics` rules, which scope to Python source.
+These are prose conventions. The code-side counterparts (potency log-transform handling, censored values, cross-assay comparability, dose-response fitting, inhibition mechanism, scaffold-aware splitting) live in the `medicinal-chemistry`, `biology`, and `cheminformatics` rules, which scope to Python source.
