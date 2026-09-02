@@ -406,7 +406,9 @@ def evaluate_concluding_summary(text: str) -> list[Occurrence]:
     prose = _visible_prose(text)
     offset = max(0, len(prose) - 800)
     pattern = re.compile(
-        r"\b(?:ultimately|in\s+conclusion|in\s+summary|all\s+in\s+all)\b",
+        r"\b(?:ultimately|in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all|"
+        r"to[ \t]+summarize|to[ \t]+sum[ \t]+up|to[ \t]+conclude|in[ \t]+closing|"
+        r"by[ \t]+way[ \t]+of[ \t]+conclusion)\b",
         re.IGNORECASE,
     )
     found = _matches(prose[offset:], pattern)

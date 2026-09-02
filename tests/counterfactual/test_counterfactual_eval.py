@@ -135,6 +135,20 @@ def test_filler_evaluator_finds_high_precision_opening_variants() -> None:
     assert len(found) == 5
 
 
+def test_conclusion_evaluator_finds_explicit_summary_variants() -> None:
+    """Count explicit summary transitions without counting ambiguous closing adverbs."""
+    text = (
+        "To summarize, one result dominates. To sum up, the evidence agrees. "
+        "To conclude, the mechanism is stable. In closing, caution remains. "
+        "By way of conclusion, the estimate is bounded. "
+        "Overall performance improved. Finally, the process stopped."
+    )
+
+    found = evaluation.evaluate_concluding_summary(text)
+
+    assert len(found) == 5
+
+
 def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:
     """Restrict opening and conclusion markers to their stated positions."""
     middle = "In summary, this phrase is discussed as an example. "
