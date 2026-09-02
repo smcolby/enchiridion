@@ -598,6 +598,47 @@ def test_antithesis_evaluator_finds_variants_and_ignores_plain_contrast() -> Non
     assert len(found) == 5
 
 
+def test_antithesis_evaluator_finds_non_copular_and_cross_sentence_pivots() -> None:
+    """Count calibrated pivot forms that do not use one copular clause."""
+    determiner = evaluation.evaluate_antithesis_pivot(
+        "The opening revealed not a dusty room, but a forest."
+    )
+    preposition = evaluation.evaluate_antithesis_pivot(
+        "Performance stems not from novelty, but from scale."
+    )
+    auxiliary = evaluation.evaluate_antithesis_pivot(
+        "They do not understand language; they approximate token distributions."
+    )
+    verbal = evaluation.evaluate_antithesis_pivot(
+        "It did not look like a door; it looked like an invitation."
+    )
+    cross_sentence = evaluation.evaluate_antithesis_pivot("It was not a bug. It was a feature.")
+
+    assert len(determiner) == 1
+    assert len(preposition) == 1
+    assert len(auxiliary) == 1
+    assert len(verbal) == 1
+    assert len(cross_sentence) == 1
+
+
+def test_antithesis_evaluator_rejects_unrelated_negative_clauses() -> None:
+    """Exclude ordinary negation near contrast words or later sentences."""
+    text = (
+        "She called her mother, but Elena did not answer. "
+        "Post-training mitigates but does not eliminate harmful outputs. "
+        "The tokenizer is fixed; the model cannot learn new tokenizations. "
+        "It was not activated. The assay ended. "
+        "It was not rushing. It was not demanding. "
+        "It's not fast, it's not safe."
+    )
+
+    found = evaluation.evaluate_antithesis_pivot(text)
+    strict_found = evaluation.evaluate_antithesis_pivot_strict(text)
+
+    assert found == []
+    assert strict_found == []
+
+
 def test_antithesis_evaluator_rejects_false_grammatical_pivots() -> None:
     """Require a positive contrast instead of nearby unrelated copulas."""
     positives = (

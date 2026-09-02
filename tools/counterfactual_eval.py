@@ -760,7 +760,7 @@ def evaluate_antithesis_pivot_strict(text: str) -> list[Occurrence]:
         rf"(?:{pronoun}[ \t]+(?:(?:is|was)[ \t]+not|(?:isn|wasn)[’']t)|"
         rf"{pronoun}[’']s[ \t]+not)"
     )
-    positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)"
+    positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)(?![ \t]+not\b)"
     pattern = re.compile(
         rf"\b{negative}\b[^.!?\n]{{1,140}}?[,;:][ \t]*{positive}\b|"
         r"\bnot[ \t]+just\b[^.!?\n]{1,140}?\bbut\b",
@@ -778,13 +778,21 @@ def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
         rf"(?:{subject}[ \t]+(?:(?:is|was|are|were)[ \t]+not|"
         rf"(?:isn|wasn|aren|weren)[’']t)|{contracted_subject}[ \t]+not)"
     )
-    positive_copula = rf"(?:{subject}[ \t]+(?:is|was|are|were)|{contracted_subject})"
+    positive_copula = (
+        rf"(?:{subject}[ \t]+(?:is|was|are|were)|{contracted_subject})"
+        r"(?![ \t]+not\b)"
+    )
     pronoun = r"(?:it|this|that)"
     pronoun_negative = (
         rf"(?:{pronoun}[ \t]+(?:(?:is|was)[ \t]+not|(?:isn|wasn)[’']t)|"
         rf"{pronoun}[’']s[ \t]+not)"
     )
-    pronoun_positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)"
+    pronoun_positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)(?![ \t]+not\b)"
+    clause_subject = r"(?:it|this|that|they|he|she|we|the[ \t]+[a-z][\w’'-]*)"
+    negative_auxiliary = (
+        rf"{clause_subject}[ \t]+(?:"
+        r"(?:do|does|did)[ \t]+not|(?:don|doesn|didn)[’']t)"
+    )
     pattern = re.compile(
         rf"\b{pronoun_negative}\b[^.!?\n]{{1,140}}?[,;:][ \t]*"
         rf"{pronoun_positive}\b|"
@@ -795,7 +803,16 @@ def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
         r"(?:[ \t]+|[,;:][ \t]*)(?:but(?:[ \t]+(?:also|rather))?|rather|instead)\b)|"
         r"\b(?:not|(?:isn|wasn|aren|weren)[’']t)[ \t]+"
         r"(?:just|merely|only|solely)\b[^.!?\n]{1,140}?\bbut(?:[ \t]+also)?\b|"
-        r"\bnot\b[^.!?\n]{1,140}?[,;:][ \t]*(?:but[ \t]+rather|rather|instead)\b",
+        r"\bnot\b[^.!?\n]{1,140}?[,;:][ \t]*(?:but[ \t]+rather|rather|instead)\b|"
+        r"\bnot[ \t]+(?:a|an|the)\b[^.!?\n]{1,140}?[,;:][ \t]*"
+        r"but[ \t]+(?:a|an|the)\b|"
+        r"\bnot[ \t]+(?:from|by|through|because[ \t]+of|due[ \t]+to)\b"
+        r"[^.!?\n]{1,140}?[,;:][ \t]*but(?:[ \t]+rather)?[ \t]+"
+        r"(?:from|by|through|because[ \t]+of|due[ \t]+to)\b|"
+        rf"\b{negative_auxiliary}\b[^.!?\n]{{1,140}}?[;:][ \t]*"
+        rf"{clause_subject}[ \t]+[a-z][\w’'-]*\b|"
+        rf"\b{pronoun_negative}\b[^.!?\n]{{1,140}}?[.!?][ \t]+"
+        rf"{pronoun_positive}\b",
         re.IGNORECASE,
     )
     return _matches(prose, pattern)
