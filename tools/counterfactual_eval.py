@@ -13,7 +13,6 @@ import argparse
 import concurrent.futures
 import hashlib
 import http.client
-import inspect
 import json
 import re
 import sys
@@ -42,6 +41,7 @@ MARKDOWN_HYPHEN_STRUCTURE_RE = re.compile(
     re.MULTILINE,
 )
 CLI_LONG_OPTION_RE = re.compile(r"(?<!\S)--[a-z][\w-]*(?:=[^\s]+)?", re.IGNORECASE)
+RUNNER_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
 
 
 @dataclass(frozen=True)
@@ -735,18 +735,8 @@ SCREENING_BINDINGS = (
 
 
 def evaluator_version() -> str:
-    """Hash evaluator implementations and bindings for report provenance."""
-    identity = {
-        "evaluators": {
-            name: inspect.getsource(evaluator) for name, evaluator in sorted(EVALUATORS.items())
-        },
-        "strict_evaluators": {
-            name: inspect.getsource(evaluator)
-            for name, evaluator in sorted(STRICT_EVALUATORS.items())
-        },
-        "bindings": [asdict(binding) for binding in SCREENING_BINDINGS],
-    }
-    return _stable_hash(identity)[:16]
+    """Return the runner source hash captured when this process imported the module."""
+    return RUNNER_SOURCE_HASH
 
 
 def _request_json(
