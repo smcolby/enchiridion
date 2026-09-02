@@ -14,6 +14,9 @@ __pycache__/
 *.pyc
 .ruff_cache/
 
+# Counterfactual evaluation outputs
+.counterfactual-artifacts/
+
 # Editor
 .vscode/
 .idea/

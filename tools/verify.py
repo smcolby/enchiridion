@@ -23,6 +23,7 @@ import registry  # noqa: E402
 
 REPO = Path(__file__).parent.parent
 SYNC = REPO / "tools/sync.py"
+RULE_TEMPLATE = REPO / "tools/rule_template.py"
 
 # a line opening or closing a fenced code block: 3+ backticks or tildes
 FENCE_RE = re.compile(r"^(?P<indent>\s*)(?P<fence>`{3,}|~{3,})")
@@ -141,7 +142,7 @@ def check_markdown_fidelity() -> int:
 
 
 def main():
-    """Run sync check plus the doctrine budget; exit non-zero on drift."""
+    """Run congruence, source-template, budget, and Markdown checks."""
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -155,9 +156,10 @@ def main():
     cmd += ["--agents"] if args.agents else ["--all"]
 
     result_sync = subprocess.run(cmd)
+    result_template = subprocess.run([sys.executable, str(RULE_TEMPLATE)])
     budget = check_doctrine_budget()
     markdown = check_markdown_fidelity()
-    sys.exit(result_sync.returncode | budget | markdown)
+    sys.exit(result_sync.returncode | result_template.returncode | budget | markdown)
 
 
 if __name__ == "__main__":

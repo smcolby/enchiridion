@@ -1,0 +1,45 @@
+[[prompts]]
+id = "history-fall-of-rome"
+category = "history"
+text = """
+Write a report of 1,800 to 2,200 words on the fall of Rome and the lessons that
+people and institutions might learn from it today. Address the major political,
+economic, military, and social explanations, distinguish the western empire's
+collapse from the eastern empire's survival, and treat disputed interpretations
+with appropriate caution. Return only the report.
+"""
+
+[[prompts]]
+id = "science-pregnane-x-receptor"
+category = "science"
+text = """
+Write a report of 1,800 to 2,200 words on the pregnane X receptor and its
+implications in absorption, distribution, metabolism, excretion, and toxicity.
+Explain its biology, ligand promiscuity, transcriptional effects, role in drug-drug
+interactions, species differences, experimental assays, and implications for drug
+discovery. Write for a scientifically literate reader outside the specialty.
+Return only the report.
+"""
+
+[[prompts]]
+id = "technical-llm-architecture"
+category = "technical"
+text = """
+Write a report of 1,800 to 2,200 words explaining how large language models work
+to a PhD-level computer scientist who does not specialize in machine learning.
+Cover tokenization, transformer architecture, attention, pretraining objectives,
+optimization, inference, post-training, context handling, and major limitations.
+Use enough mathematical and systems detail to make the mechanisms concrete.
+Return only the report.
+"""
+
+[[prompts]]
+id = "creative-time-dilated-door"
+category = "creative"
+text = """
+Write a story of 1,800 to 2,200 words about a person who discovers a secret door
+to a fantasy world where time runs at one seventh the speed of time at home. Each
+visit feels brief, but friends and relatives are older whenever the protagonist
+returns. Develop the emotional consequences of repeated visits and give the story
+a complete ending. Return only the story.
+"""
