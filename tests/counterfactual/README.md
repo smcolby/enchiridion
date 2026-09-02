@@ -16,11 +16,19 @@ kinds are supported:
   directive
 - `composite`: a generated parent-plus-exemplar treatment used to measure whether
   the example adds value in the context where it is deployed
+- `full-rule`: the complete canonical rule body compared with the empty control
+- `leave-one-out`: the complete rule minus one canonical item, compared with the
+  complete-rule response arm
 
 Anti-hallucination rows are tested one at a time. They remain a distinct evidence
 class because many record a failure observed in real work. A zero ecological
-baseline does not erase that provenance. Compare the exemplar arm with both its
+control does not erase that provenance. Compare the exemplar arm with both its
 parent directive and their composite before deciding whether the row is useful.
+
+Leave-one-out scoring uses the full rule as its control. A positive treatment-minus-
+control rate delta means that omitting the source item increased measured
+violations. Full-rule responses are generated once per prompt and seed and shared
+across evaluator-specific comparisons.
 
 Case identifiers contain the canonical artifact, section, content slug, and content
 hash. Treatments are read from the parsed source item at runtime. A source edit

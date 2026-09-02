@@ -57,6 +57,36 @@ def test_exemplar_and_generated_composite_render_canonical_treatments() -> None:
     assert composite == f"{directive}\n\n{exemplar}"
 
 
+def test_cases_include_full_rule_and_atomic_leave_one_out_treatments() -> None:
+    """Derive complete and omission treatments from the same canonical rule body."""
+    cases = evaluation.load_cases()
+    leave_one_out = next(
+        case
+        for case in cases.values()
+        if case.kind == "leave-one-out" and case.source_item_ids == (ANTITHESIS_ID,)
+    )
+    full_rule = next(
+        case
+        for case in cases.values()
+        if case.kind == "full-rule"
+        and case.treatment_arm == leave_one_out.control_arm
+        and case.evaluator == leave_one_out.evaluator
+    )
+    canonical = {
+        item.id: item.text for artifact in template.load_inventory() for item in artifact.items
+    }
+
+    assert full_rule.treatment is not None
+    assert leave_one_out.treatment is not None
+    assert canonical[ANTITHESIS_ID] in " ".join(full_rule.treatment.split())
+    assert canonical[ANTITHESIS_ID] not in " ".join(leave_one_out.treatment.split())
+    assert leave_one_out.treatment_hash == evaluation.treatment_hash(leave_one_out.treatment)
+
+    selected = evaluation._selected_cases(cases, [leave_one_out.id])
+    assert leave_one_out.id in selected
+    assert any(case.treatment_arm == leave_one_out.control_arm for case in selected.values())
+
+
 def test_job_matrix_reuses_one_baseline_per_prompt_and_seed() -> None:
     """Generate one global baseline matrix regardless of the number of treatments."""
     prompts = evaluation.load_prompts()
@@ -69,6 +99,38 @@ def test_job_matrix_reuses_one_baseline_per_prompt_and_seed() -> None:
 
     assert len(baseline_jobs) == len(prompts) * len(seeds)
     assert len(baseline_keys) == len(baseline_jobs)
+    assert len({(job.arm, job.prompt.id, job.seed) for job in jobs}) == len(jobs)
+
+    full_rule_arms = {case.treatment_arm for case in cases.values() if case.kind == "full-rule"}
+    for arm in full_rule_arms:
+        assert sum(job.arm == arm for job in jobs) == len(prompts) * len(seeds)
+
+
+def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None:
+    """Report omission increases with the complete rule as the paired control."""
+    prompts = evaluation.load_prompts()
+    cases = evaluation.load_cases()
+    case = next(
+        item
+        for item in cases.values()
+        if item.kind == "leave-one-out" and item.source_item_ids == (ANTITHESIS_ID,)
+    )
+    seed = 101
+    for prompt_id in case.prompts:
+        responses = {
+            case.control_arm: "The mechanism has one direct explanation.",
+            case.treatment_arm: "It is not a small change, it is a redesign.",
+        }
+        for arm, response in responses.items():
+            path = tmp_path / "responses" / arm / prompt_id / f"{seed}.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(response)
+
+    score = evaluation._score_case(tmp_path, case, prompts, (seed,))
+
+    assert score["control_occurrences"] == 0
+    assert score["treatment_occurrences"] == len(case.prompts)
+    assert score["rate_delta_per_1000_words"] > 0
 
 
 def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> None:
@@ -89,6 +151,29 @@ def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> 
     case_ids = {case["id"] for case in manifest["cases"]}
     assert case_ids == {first.id, second.id}
     assert manifest["evaluator_versions"] == [evaluation.evaluator_version()]
+
+
+def test_manifest_merge_upgrades_legacy_case_defaults(tmp_path: Path) -> None:
+    """Resume response stores written before mode and arm metadata existed."""
+    config = evaluation.load_config()
+    prompts = evaluation.load_prompts()
+    case = next(iter(evaluation.load_cases().values()))
+    metadata = evaluation.ServerMetadata(
+        ollama_version="test-version",
+        model_digest="test-digest",
+    )
+    evaluation._write_manifest(tmp_path, config, metadata, prompts, {case.id: case}, (101,))
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    for field in ("mode", "treatment_arm", "control_arm", "treatment_hash"):
+        manifest["cases"][0].pop(field)
+    manifest_path.write_text(json.dumps(manifest))
+
+    evaluation._write_manifest(tmp_path, config, metadata, prompts, {case.id: case}, (101,))
+
+    updated = json.loads(manifest_path.read_text())
+    assert updated["cases"][0]["mode"] == "one-at-a-time"
+    assert updated["cases"][0]["treatment_hash"] == case.treatment_hash
 
 
 def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) -> None:

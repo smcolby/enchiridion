@@ -86,6 +86,10 @@ class EvaluationCase:
     parent: str | None = None
     components: tuple[str, ...] = ()
     evidence: str | None = None
+    mode: str = "one-at-a-time"
+    treatment_arm: str | None = None
+    control_arm: str = "baseline"
+    treatment_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -218,10 +222,34 @@ def composite_id_for(parent_id: str, exemplar_id: str) -> str:
     return f"{parent_id}.with-exemplar-{digest}"
 
 
+def treatment_hash(treatment: str) -> str:
+    """Hash one exact rendered treatment for manifest and cache provenance."""
+    return hashlib.sha256(treatment.encode()).hexdigest()
+
+
+def _case_treatment_arm(case: EvaluationCase) -> str:
+    """Return the response arm used as one case's treatment."""
+    return case.treatment_arm or case.id
+
+
+def _full_rule_arm(artifact: rule_template.ArtifactInventory, treatment: str) -> str:
+    """Derive a shared full-rule response arm from canonical rendered content."""
+    return f"{artifact.name}.full-rule-{treatment_hash(treatment)[:8]}"
+
+
+def _leave_one_out_id(source_item_id: str, treatment: str) -> str:
+    """Derive one omission arm from its source item and rendered rule content."""
+    return f"{source_item_id}.leave-one-out-{treatment_hash(treatment)[:8]}"
+
+
 def load_cases() -> dict[str, EvaluationCase]:
-    """Build screening cases from canonical source items and evaluator bindings."""
-    source_items = _canonical_source_items()
+    """Build addition, full-rule, and omission cases from canonical source items."""
+    inventory = rule_template.load_inventory()
+    source_items = {item.id: item for artifact in inventory for item in artifact.items}
+    artifacts_by_path = {artifact.path: artifact for artifact in inventory}
     cases: dict[str, EvaluationCase] = {}
+
+    # Build one-at-a-time atomic treatments
     for binding in SCREENING_BINDINGS:
         item = source_items.get(binding.source_item_id)
         if item is None:
@@ -232,6 +260,7 @@ def load_cases() -> dict[str, EvaluationCase]:
             )
         if binding.source_item_id in cases:
             raise ValueError(f"duplicate evaluator binding '{binding.source_item_id}'")
+        mode = "exemplar" if item.kind == "anti-hallucination" else "one-at-a-time"
         cases[binding.source_item_id] = EvaluationCase(
             id=binding.source_item_id,
             kind=item.kind,
@@ -243,8 +272,11 @@ def load_cases() -> dict[str, EvaluationCase]:
             treatment=item.treatment,
             parent=binding.parent,
             evidence=binding.evidence,
+            mode=mode,
+            treatment_hash=treatment_hash(item.treatment),
         )
 
+    # Compose directive and exemplar treatments without authored copies
     for binding in SCREENING_BINDINGS:
         if binding.parent is None:
             continue
@@ -267,7 +299,56 @@ def load_cases() -> dict[str, EvaluationCase]:
             parent=parent.id,
             components=(parent.id, exemplar.id),
             evidence=binding.evidence,
+            mode="composite",
         )
+
+    # Share one complete-rule response arm across evaluator-specific comparisons
+    bindings_by_path: dict[str, list[EvaluationBinding]] = {}
+    for binding in SCREENING_BINDINGS:
+        bindings_by_path.setdefault(source_items[binding.source_item_id].path, []).append(binding)
+    for path, bindings in bindings_by_path.items():
+        artifact = artifacts_by_path[path]
+        full_treatment = rule_template.render_rule_treatment(artifact)
+        full_arm = _full_rule_arm(artifact, full_treatment)
+        full_source_ids = tuple(item.id for item in artifact.items)
+        comparison_keys = {(binding.evaluator, binding.prompts) for binding in bindings}
+        for evaluator, prompt_ids in sorted(comparison_keys):
+            case_id = f"{full_arm}.{evaluator}"
+            cases[case_id] = EvaluationCase(
+                id=case_id,
+                kind="full-rule",
+                source=path,
+                section="Full rule",
+                evaluator=evaluator,
+                prompts=prompt_ids,
+                source_item_ids=full_source_ids,
+                treatment=full_treatment,
+                mode="full-rule",
+                treatment_arm=full_arm,
+                treatment_hash=treatment_hash(full_treatment),
+            )
+
+        # Render one full-rule omission for every evaluator-bound atomic item
+        for binding in bindings:
+            item = source_items[binding.source_item_id]
+            omitted_treatment = rule_template.render_rule_treatment(artifact, (item.id,))
+            case_id = _leave_one_out_id(item.id, omitted_treatment)
+            cases[case_id] = EvaluationCase(
+                id=case_id,
+                kind="leave-one-out",
+                source=path,
+                section=item.section,
+                evaluator=binding.evaluator,
+                prompts=binding.prompts,
+                source_item_ids=(item.id,),
+                treatment=omitted_treatment,
+                parent=binding.parent,
+                evidence=binding.evidence,
+                mode="leave-one-out",
+                treatment_arm=case_id,
+                control_arm=full_arm,
+                treatment_hash=treatment_hash(omitted_treatment),
+            )
     if not cases:
         raise ValueError("the case inventory is empty")
     return cases
@@ -279,6 +360,7 @@ def validate_inventory(
     """Return source identity and scoring metadata errors without network requests."""
     errors: list[str] = []
     source_items = _canonical_source_items()
+    available_arms = {"baseline", *(_case_treatment_arm(case) for case in cases.values())}
     for case in cases.values():
         if case.evaluator not in EVALUATORS:
             errors.append(f"{case.id}: unknown evaluator '{case.evaluator}'")
@@ -289,7 +371,7 @@ def validate_inventory(
             if source_item_id not in source_items:
                 errors.append(f"{case.id}: unknown source item '{source_item_id}'")
 
-        # Keep atomic and generated composite semantics explicit
+        # Keep atomic, composed, full-rule, and omission semantics explicit
         if case.kind in {"directive", "anti-hallucination"}:
             if case.source_item_ids != (case.id,):
                 errors.append(f"{case.id}: atomic case must use its source-derived id")
@@ -301,9 +383,23 @@ def validate_inventory(
         elif case.kind == "composite":
             if len(case.components) < 2 or case.treatment is not None:
                 errors.append(f"{case.id}: composite requires components and no copied treatment")
+        elif case.kind == "full-rule":
+            if not case.treatment or case.control_arm != "baseline":
+                errors.append(
+                    f"{case.id}: full-rule case requires a treatment and baseline control"
+                )
+        elif case.kind == "leave-one-out":
+            if not case.treatment or len(case.source_item_ids) != 1:
+                errors.append(f"{case.id}: leave-one-out case requires one omitted source item")
+            if case.control_arm == "baseline":
+                errors.append(f"{case.id}: leave-one-out case requires a full-rule control")
         else:
             errors.append(f"{case.id}: unsupported kind '{case.kind}'")
 
+        if case.treatment is not None and case.treatment_hash != treatment_hash(case.treatment):
+            errors.append(f"{case.id}: treatment hash does not match rendered content")
+        if case.control_arm not in available_arms:
+            errors.append(f"{case.id}: unknown control arm '{case.control_arm}'")
         if case.parent and case.parent not in cases:
             errors.append(f"{case.id}: unknown parent '{case.parent}'")
         for component in case.components:
@@ -320,7 +416,7 @@ def instruction_for_case(
         cycle = " -> ".join((*active, case_id))
         raise ValueError(f"case component cycle: {cycle}")
     case = cases[case_id]
-    if case.kind in {"directive", "anti-hallucination"}:
+    if case.kind in {"directive", "anti-hallucination", "full-rule", "leave-one-out"}:
         return _require_string(case.treatment, f"{case.id}.treatment")
     if case.kind == "composite":
         return "\n\n".join(
@@ -624,20 +720,24 @@ def build_jobs(
     prompts: dict[str, PromptSpec],
     seeds: tuple[int, ...],
 ) -> list[Job]:
-    """Create one shared baseline matrix and every selected treatment matrix."""
-    jobs = [
-        Job(arm="baseline", prompt=prompt, seed=seed, instruction=None)
-        for prompt in prompts.values()
-        for seed in seeds
-    ]
+    """Create unique baseline and treatment requests across shared response arms."""
+    jobs: dict[tuple[str, str, int], Job] = {}
+    for prompt in prompts.values():
+        for seed in seeds:
+            job = Job(arm="baseline", prompt=prompt, seed=seed, instruction=None)
+            jobs[(job.arm, prompt.id, seed)] = job
     for case in cases.values():
         instruction = instruction_for_case(case.id, cases)
-        jobs.extend(
-            Job(arm=case.id, prompt=prompts[prompt_id], seed=seed, instruction=instruction)
-            for prompt_id in case.prompts
-            for seed in seeds
-        )
-    return jobs
+        arm = _case_treatment_arm(case)
+        for prompt_id in case.prompts:
+            for seed in seeds:
+                job = Job(arm=arm, prompt=prompts[prompt_id], seed=seed, instruction=instruction)
+                key = (arm, prompt_id, seed)
+                previous = jobs.get(key)
+                if previous is not None and previous.instruction != instruction:
+                    raise ValueError(f"response arm '{arm}' has conflicting treatments")
+                jobs[key] = job
+    return list(jobs.values())
 
 
 def _artifact_paths(run_dir: Path, job: Job) -> tuple[Path, Path]:
@@ -700,6 +800,31 @@ def _run_job(run_dir: Path, config: ExperimentConfig, job: Job) -> str:
     return "generated"
 
 
+def _case_from_manifest_item(item: dict[str, Any]) -> EvaluationCase:
+    """Parse current and legacy manifest case records with semantic defaults."""
+    data = dict(item)
+    kind = _require_string(data.get("kind"), "manifest case kind")
+    mode_defaults = {
+        "directive": "one-at-a-time",
+        "anti-hallucination": "exemplar",
+        "composite": "composite",
+        "full-rule": "full-rule",
+        "leave-one-out": "leave-one-out",
+    }
+    data.setdefault("mode", mode_defaults.get(kind, "one-at-a-time"))
+    data.setdefault("treatment_arm", None)
+    data.setdefault("control_arm", "baseline")
+    treatment = data.get("treatment")
+    data.setdefault(
+        "treatment_hash",
+        treatment_hash(treatment) if isinstance(treatment, str) else None,
+    )
+    data["prompts"] = tuple(data["prompts"])
+    data["source_item_ids"] = tuple(data["source_item_ids"])
+    data["components"] = tuple(data.get("components", []))
+    return EvaluationCase(**data)
+
+
 def _manifest_compatibility_fields(manifest: dict[str, Any]) -> dict[str, Any]:
     """Extract generation fields that must remain fixed within one response store."""
     config = dict(_require_mapping(manifest.get("config"), "manifest.config"))
@@ -749,9 +874,12 @@ def _write_manifest(
     for case in proposed["cases"]:
         case_id = _require_string(case.get("id"), "manifest case id")
         previous = existing_cases.get(case_id)
-        if previous is not None and _stable_hash(previous) != _stable_hash(case):
-            raise ValueError(f"case '{case_id}' changed within experiment manifest")
-        existing_cases[case_id] = case
+        normalized_case = asdict(_case_from_manifest_item(case))
+        if previous is not None:
+            normalized_previous = asdict(_case_from_manifest_item(previous))
+            if _stable_hash(normalized_previous) != _stable_hash(normalized_case):
+                raise ValueError(f"case '{case_id}' changed within experiment manifest")
+        existing_cases[case_id] = normalized_case
 
     commits = set(existing.get("repository_commits", [existing.get("repository_commit")]))
     commits.add(commit)
@@ -856,63 +984,68 @@ def _score_case(
     prompts: dict[str, PromptSpec],
     seeds: tuple[int, ...],
 ) -> dict[str, Any]:
-    """Score one treatment against matched baseline responses."""
+    """Score one treatment against its matched control response arm."""
     evaluator = EVALUATORS[case.evaluator]
-    baseline_occurrences = 0
+    control_occurrences = 0
     treatment_occurrences = 0
-    baseline_words = 0
+    control_words = 0
     treatment_words = 0
-    baseline_documents = 0
+    control_documents = 0
     treatment_documents = 0
     pairs: list[tuple[float, float]] = []
     snippets: list[str] = []
+    treatment_arm = _case_treatment_arm(case)
 
     for prompt_id in case.prompts:
         if prompt_id not in prompts:
             continue
         for seed in seeds:
-            baseline = _read_response(run_dir, "baseline", prompt_id, seed)
-            treatment = _read_response(run_dir, case.id, prompt_id, seed)
-            baseline_found = evaluator(baseline)
+            control = _read_response(run_dir, case.control_arm, prompt_id, seed)
+            treatment = _read_response(run_dir, treatment_arm, prompt_id, seed)
+            control_found = evaluator(control)
             treatment_found = evaluator(treatment)
-            baseline_count = len(baseline_found)
+            control_count = len(control_found)
             treatment_count = len(treatment_found)
-            baseline_word_count = max(1, word_count(baseline))
+            control_word_count = max(1, word_count(control))
             treatment_word_count = max(1, word_count(treatment))
 
-            baseline_occurrences += baseline_count
+            control_occurrences += control_count
             treatment_occurrences += treatment_count
-            baseline_words += baseline_word_count
+            control_words += control_word_count
             treatment_words += treatment_word_count
-            baseline_documents += int(bool(baseline_found))
+            control_documents += int(bool(control_found))
             treatment_documents += int(bool(treatment_found))
             pairs.append(
                 (
-                    baseline_count * 1000 / baseline_word_count,
+                    control_count * 1000 / control_word_count,
                     treatment_count * 1000 / treatment_word_count,
                 )
             )
             if len(snippets) < 3:
                 snippets.extend(item.snippet for item in treatment_found[: 3 - len(snippets)])
 
-    baseline_rate = baseline_occurrences * 1000 / max(1, baseline_words)
+    control_rate = control_occurrences * 1000 / max(1, control_words)
     treatment_rate = treatment_occurrences * 1000 / max(1, treatment_words)
-    reduction = (baseline_rate - treatment_rate) / baseline_rate if baseline_rate > 0 else None
+    reduction = (control_rate - treatment_rate) / control_rate if control_rate > 0 else None
     interval = _bootstrap_delta_interval(pairs)
     return {
         "id": case.id,
         "kind": case.kind,
+        "mode": case.mode,
+        "control_arm": case.control_arm,
+        "treatment_arm": treatment_arm,
         "parent": case.parent,
         "evidence": case.evidence,
         "documents": len(pairs),
-        "baseline_occurrences": baseline_occurrences,
+        "control_occurrences": control_occurrences,
         "treatment_occurrences": treatment_occurrences,
-        "baseline_rate_per_1000_words": baseline_rate,
+        "control_rate_per_1000_words": control_rate,
         "treatment_rate_per_1000_words": treatment_rate,
+        "rate_delta_per_1000_words": treatment_rate - control_rate,
         "relative_rate_reduction": reduction,
-        "baseline_document_prevalence": baseline_documents / max(1, len(pairs)),
+        "control_document_prevalence": control_documents / max(1, len(pairs)),
         "treatment_document_prevalence": treatment_documents / max(1, len(pairs)),
-        "mean_baseline_words": baseline_words / max(1, len(pairs)),
+        "mean_control_words": control_words / max(1, len(pairs)),
         "mean_treatment_words": treatment_words / max(1, len(pairs)),
         "paired_rate_delta_ci95": interval,
         "treatment_snippets": snippets[:3],
@@ -926,7 +1059,7 @@ def _missing_case_responses(
     missing: list[str] = []
     for prompt_id in case.prompts:
         for seed in seeds:
-            for arm in ("baseline", case.id):
+            for arm in (case.control_arm, _case_treatment_arm(case)):
                 path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
                 if not path.is_file():
                     missing.append(f"{arm}/{prompt_id}/{seed}")
@@ -956,19 +1089,20 @@ def write_report(
         "",
         f"Run: `{run_dir.name}`",
         "",
-        "| Case | Kind | Baseline count | Treatment count | Baseline / 1k words | "
-        "Treatment / 1k words | Relative reduction | 95% CI, rate delta |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Case | Mode | Control count | Treatment count | Control / 1k words | "
+        "Treatment / 1k words | Rate delta | Relative reduction | 95% CI |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for score in scores:
         reduction = score["relative_rate_reduction"]
         reduction_text = "undefined" if reduction is None else f"{reduction:.1%}"
         lower, upper = score["paired_rate_delta_ci95"]
         lines.append(
-            f"| {score['id']} | {score['kind']} | {score['baseline_occurrences']} | "
+            f"| {score['id']} | {score['mode']} | {score['control_occurrences']} | "
             f"{score['treatment_occurrences']} | "
-            f"{score['baseline_rate_per_1000_words']:.3f} | "
-            f"{score['treatment_rate_per_1000_words']:.3f} | {reduction_text} | "
+            f"{score['control_rate_per_1000_words']:.3f} | "
+            f"{score['treatment_rate_per_1000_words']:.3f} | "
+            f"{score['rate_delta_per_1000_words']:.3f} | {reduction_text} | "
             f"[{lower:.3f}, {upper:.3f}] |"
         )
 
@@ -1011,15 +1145,26 @@ def _selected_cases(
     if unknown:
         raise ValueError(f"unknown cases: {', '.join(unknown)}")
 
-    # Composite results require their constituent arms for a meaningful comparison
+    # Composite and omission results require their generating control arms
     selected = set(requested)
     pending = list(requested)
     while pending:
         case = cases[pending.pop()]
-        for component in case.components:
-            if component not in selected:
-                selected.add(component)
-                pending.append(component)
+        dependencies = list(case.components)
+        if case.control_arm != "baseline":
+            candidates = [
+                candidate.id
+                for candidate in cases.values()
+                if _case_treatment_arm(candidate) == case.control_arm
+                and candidate.evaluator == case.evaluator
+            ]
+            if not candidates:
+                raise ValueError(f"{case.id}: no case generates control arm '{case.control_arm}'")
+            dependencies.append(candidates[0])
+        for dependency in dependencies:
+            if dependency not in selected:
+                selected.add(dependency)
+                pending.append(dependency)
     return {case_id: cases[case_id] for case_id in cases if case_id in selected}
 
 
@@ -1042,15 +1187,9 @@ def _load_manifest_run(
     raw = json.loads((run_dir / "manifest.json").read_text())
     prompts = {item["id"]: PromptSpec(**item) for item in raw["prompts"]}
     cases = {
-        item["id"]: EvaluationCase(
-            **{
-                **item,
-                "prompts": tuple(item["prompts"]),
-                "source_item_ids": tuple(item["source_item_ids"]),
-                "components": tuple(item.get("components", [])),
-            }
-        )
+        item["id"]: _case_from_manifest_item(item)
         for item in raw["cases"]
+        if isinstance(item, dict)
     }
     return prompts, cases, tuple(raw["config"]["seeds"])
 
