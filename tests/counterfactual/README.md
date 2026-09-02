@@ -8,7 +8,7 @@ does not load instructions, skills, agents, or settings from any coding harness.
 
 Every prompt and seed has one shared baseline. `tools/rule_template.py` derives
 atomic items and identifiers directly from canonical Markdown. Evaluator bindings
-select source-derived identifiers without copying instruction text. Three treatment
+select source-derived identifiers without copying instruction text. Five treatment
 kinds are supported:
 
 - `directive`: one canonical top-level list item or directive paragraph
@@ -27,8 +27,26 @@ parent directive and their composite before deciding whether the row is useful.
 
 Leave-one-out scoring uses the full rule as its control. A positive treatment-minus-
 control rate delta means that omitting the source item increased measured
-violations. Full-rule responses are generated once per prompt and seed and shared
-across evaluator-specific comparisons.
+violations. Reports call this value the conditional contribution because it measures
+one item's benefit given the rest of the rule. Full-rule responses are generated once
+per prompt and seed and shared across evaluator-specific comparisons.
+
+When baseline, atomic, rest-only, and full-rule responses are complete, the report
+also calculates isolated benefit, conditional contribution, benefit retained, and
+attenuation. Its bootstrap resamples complete prompt-seed quadruples so all arm
+relationships remain paired. The default practical equivalence margin is 0.1
+occurrences per 1,000 response words, equivalent to one occurrence per 10,000
+words. Override the decision margin without invalidating generated responses:
+
+```bash
+python tools/counterfactual_eval.py report \
+  --run-id <run-id> \
+  --equivalence-margin 0.1
+```
+
+The equivalence classification is evidence-based. An interval entirely within the
+margin supports a negligible conditional contribution. An interval wholly above the
+margin supports retention. Zero evaluator exposure remains uninformative.
 
 Case identifiers contain the canonical artifact, section, content slug, and content
 hash. Treatments are read from the parsed source item at runtime. A source edit
@@ -117,10 +135,16 @@ fixed context rather than separate treatments. Candidate text and hashes are
 stored in an immutable case record inside the ignored run manifest, not in a
 committed evaluator case file.
 
-Raw prose, request metadata, scores, and reports live under
-`.counterfactual-artifacts/`. The directory is ignored by git. Cache identity
+Raw prose, request metadata, case scores, four-arm interaction records, and reports
+live under `.counterfactual-artifacts/`. Machine-readable interaction results use
+`interactions.json`. The directory is ignored by git. Cache identity
 includes the Ollama version, model digest, generation settings, prompts, and seed
 matrix. A model or prompt change therefore creates a new baseline automatically.
+
+Use targeted confirmation runs to limit generation cost. Pass both the atomic case
+and its leave-one-out case through repeated `--case` options. The selector adds the
+shared full-rule control automatically. This produces the four arms needed for one
+source item without regenerating unrelated treatments.
 
 Pytest covers inventory and evaluator behavior without network access. The online
 experiment is intentionally excluded from pre-commit because it is long-running

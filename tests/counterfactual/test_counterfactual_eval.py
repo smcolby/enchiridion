@@ -395,6 +395,95 @@ def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None
     assert score["strict_view"]["treatment_occurrences"] == len(case.prompts)
 
 
+def test_four_arm_metrics_measure_conditional_attenuation() -> None:
+    """Compare isolated and in-context benefits on one pooled rate scale."""
+    pairs = [(10, 1000, 2, 1000, 6, 1000, 4, 1000)]
+
+    metrics = evaluation._four_arm_metrics(pairs)
+    interval = evaluation._bootstrap_attenuation_interval(pairs, samples=100)
+
+    assert metrics == {
+        "baseline_rate_per_1000_words": 10.0,
+        "atomic_rate_per_1000_words": 2.0,
+        "rest_only_rate_per_1000_words": 6.0,
+        "full_rule_rate_per_1000_words": 4.0,
+        "isolated_benefit_per_1000_words": 8.0,
+        "conditional_benefit_per_1000_words": 2.0,
+        "benefit_retained": 0.25,
+        "attenuation_per_1000_words": 6.0,
+    }
+    assert interval == (6.0, 6.0)
+
+
+def test_conditional_status_uses_practical_equivalence_margin() -> None:
+    """Distinguish negligible, useful, harmful, and unresolved contributions."""
+    margin = 0.1
+
+    equivalent = evaluation._conditional_contribution_status(
+        (-0.05, 0.05), margin, has_exposure=True
+    )
+    useful = evaluation._conditional_contribution_status((0.11, 0.30), margin, has_exposure=True)
+    harmful = evaluation._conditional_contribution_status((-0.30, -0.11), margin, has_exposure=True)
+    uncertain = evaluation._conditional_contribution_status(
+        (-0.05, 0.20), margin, has_exposure=True
+    )
+    uninformative = evaluation._conditional_contribution_status(
+        (0.0, 0.0), margin, has_exposure=False
+    )
+
+    assert equivalent == "equivalent-within-margin"
+    assert useful == "contribution-exceeds-margin"
+    assert harmful == "omission-improves-over-margin"
+    assert uncertain == "inconclusive"
+    assert uninformative == "zero-exposure-uninformative"
+
+
+def test_report_writes_four_arm_directive_analysis(tmp_path: Path) -> None:
+    """Persist machine-readable and Markdown interaction evidence for complete arms."""
+    config = evaluation.load_config()
+    prompts = evaluation.load_prompts()
+    all_cases = evaluation.load_cases()
+    omission = next(
+        case
+        for case in all_cases.values()
+        if case.mode == "leave-one-out" and case.source_item_ids == (ANTITHESIS_ID,)
+    )
+    selected = evaluation._selected_cases(all_cases, [ANTITHESIS_ID, omission.id])
+    seed = 101
+    responses = {
+        "baseline": "It's not delay, it's uncertainty. It's not size, it's coordination.",
+        ANTITHESIS_ID: "It's not delay, it's uncertainty.",
+        omission.treatment_arm: "It's not size, it's coordination.",
+        omission.control_arm: "The result follows from coordination.",
+    }
+    for job in evaluation.build_jobs(selected, prompts, (seed,)):
+        _write_cached_response(tmp_path, config, job, responses[job.arm])
+
+    report_path = evaluation.write_report(
+        tmp_path,
+        config,
+        prompts,
+        selected,
+        (seed,),
+        equivalence_margin=0.1,
+    )
+
+    interactions = json.loads((tmp_path / "interactions.json").read_text())
+    report = report_path.read_text()
+    assert len(interactions) == 1
+    assert interactions[0]["source_item_id"] == ANTITHESIS_ID
+    assert interactions[0]["scoring_evaluator_version"] == evaluation.evaluator_version()
+    assert len(interactions[0]["isolated_benefit_ci95"]) == 2
+    assert interactions[0]["baseline_occurrences"] == len(prompts) * 2
+    assert interactions[0]["atomic_occurrences"] == len(prompts)
+    assert interactions[0]["rest_only_occurrences"] == len(prompts)
+    assert interactions[0]["full_rule_occurrences"] == 0
+    assert "## Four-arm directive contribution" in report
+    assert "Benefit retained" in report
+    assert "Conditional status" in report
+    assert "0.100 occurrences per 1,000 words" in report
+
+
 def test_calibration_collects_matches_and_deterministic_nonmatches(tmp_path: Path) -> None:
     """Prepare reproducible real-response samples for evaluator boundary review."""
     config = evaluation.load_config()
@@ -512,6 +601,19 @@ def test_cache_validation_rejects_tampered_response_content(tmp_path: Path) -> N
     assert not evaluation._is_cached(tmp_path, config, job)
 
 
+def test_report_rejects_negative_equivalence_margin(tmp_path: Path) -> None:
+    """Reject a decision threshold that cannot represent an absolute effect size."""
+    config = evaluation.load_config()
+
+    message = ""
+    try:
+        evaluation.write_report(tmp_path, config, {}, {}, (), equivalence_margin=-0.1)
+    except ValueError as error:
+        message = str(error)
+
+    assert "finite non-negative" in message
+
+
 def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) -> None:
     """Generate useful scoring output before every treatment arm finishes."""
     config = evaluation.load_config()
@@ -536,7 +638,7 @@ def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) ->
     assert [score["id"] for score in scores] == [complete_case.id]
     assert scores[0]["scoring_evaluator_version"] == evaluation.evaluator_version()
     assert "## Strict and expanded evaluator views" in report
-    assert "## Source-item comparison" in report
+    assert "## Directive contribution summary" in report
     assert "zero-exposure-uninformative" in report
     assert "## Pending cases" in report
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run counterfactual evaluations of individual catalog directives against Ollama.
+"""Run counterfactual directive and composition evaluations against Ollama.
 
 The runner calls Ollama's native chat API without a coding harness. It caches a
 shared baseline for every prompt and seed, queues treatment requests with bounded
-concurrency, scores deterministic violations, and writes an ignored Markdown
-report under .counterfactual-artifacts/.
+concurrency, scores deterministic violations and four-arm interactions, and writes
+ignored reports under .counterfactual-artifacts/.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import concurrent.futures
 import hashlib
 import http.client
 import json
+import math
 import re
 import sys
 import threading
@@ -31,6 +32,7 @@ DEFAULT_CONFIG = REPO / "tests/counterfactual/config.toml"
 DEFAULT_PROMPTS = REPO / "tests/counterfactual/prompts.toml"
 ARTIFACTS_DIR = REPO / ".counterfactual-artifacts"
 MODEL_ID = "qwen3.8:27b-iq4xs"
+DEFAULT_EQUIVALENCE_MARGIN = 0.1
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 WORD_RE = re.compile(r"\b[\w’'-]+\b", re.UNICODE)
 FENCED_CODE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.DOTALL)
@@ -144,6 +146,7 @@ class Occurrence:
 
 Evaluator = Callable[[str], list[Occurrence]]
 PairedCounts = tuple[int, int, int, int]
+FourArmCounts = tuple[int, int, int, int, int, int, int, int]
 
 
 def _require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -1471,6 +1474,71 @@ def _bootstrap_delta_interval(
     return deltas[int(samples * 0.025)], deltas[int(samples * 0.975)]
 
 
+def _four_arm_metrics(pairs: list[FourArmCounts]) -> dict[str, float | None]:
+    """Calculate isolated, conditional, and interaction effects from four paired arms."""
+    totals = [sum(pair[index] for pair in pairs) for index in range(8)]
+    baseline_rate = totals[0] * 1000 / max(1, totals[1])
+    atomic_rate = totals[2] * 1000 / max(1, totals[3])
+    rest_only_rate = totals[4] * 1000 / max(1, totals[5])
+    full_rule_rate = totals[6] * 1000 / max(1, totals[7])
+    isolated_benefit = baseline_rate - atomic_rate
+    conditional_benefit = rest_only_rate - full_rule_rate
+    return {
+        "baseline_rate_per_1000_words": baseline_rate,
+        "atomic_rate_per_1000_words": atomic_rate,
+        "rest_only_rate_per_1000_words": rest_only_rate,
+        "full_rule_rate_per_1000_words": full_rule_rate,
+        "isolated_benefit_per_1000_words": isolated_benefit,
+        "conditional_benefit_per_1000_words": conditional_benefit,
+        "benefit_retained": (
+            conditional_benefit / isolated_benefit if isolated_benefit > 0 else None
+        ),
+        "attenuation_per_1000_words": isolated_benefit - conditional_benefit,
+    }
+
+
+def _bootstrap_attenuation_interval(
+    pairs: list[FourArmCounts], samples: int = 5000
+) -> tuple[float, float]:
+    """Estimate a paired-bootstrap interval for four-arm effect attenuation."""
+    if not pairs:
+        return 0.0, 0.0
+
+    # Resample complete prompt-seed quadruples to preserve every arm relationship
+    attenuations: list[float] = []
+    for sample_index in range(samples):
+        selected: list[FourArmCounts] = []
+        for draw_index in range(len(pairs)):
+            address = f"interaction:20260831:{sample_index}:{draw_index}".encode()
+            draw = int.from_bytes(hashlib.sha256(address).digest()[:8]) % len(pairs)
+            selected.append(pairs[draw])
+        value = _four_arm_metrics(selected)["attenuation_per_1000_words"]
+        if not isinstance(value, float):
+            raise TypeError("four-arm attenuation must be numeric")
+        attenuations.append(value)
+    attenuations.sort()
+    return (
+        attenuations[int(samples * 0.025)],
+        attenuations[int(samples * 0.975)],
+    )
+
+
+def _conditional_contribution_status(
+    interval: tuple[float, float], margin: float, *, has_exposure: bool
+) -> str:
+    """Classify conditional evidence against one practical equivalence margin."""
+    if not has_exposure:
+        return "zero-exposure-uninformative"
+    lower, upper = interval
+    if lower >= -margin and upper <= margin:
+        return "equivalent-within-margin"
+    if lower > margin:
+        return "contribution-exceeds-margin"
+    if upper < -margin:
+        return "omission-improves-over-margin"
+    return "inconclusive"
+
+
 def _score_case(
     run_dir: Path,
     case: EvaluationCase,
@@ -1639,8 +1707,144 @@ def _sensitivity_lines(scores: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _collect_four_arm_pairs(
+    run_dir: Path,
+    addition: EvaluationCase,
+    omission: EvaluationCase,
+    prompts: dict[str, PromptSpec],
+    seeds: tuple[int, ...],
+    evaluator: Evaluator,
+) -> list[FourArmCounts]:
+    """Score baseline, atomic, rest-only, and full-rule responses as matched quadruples."""
+    if addition.prompts != omission.prompts:
+        raise ValueError(f"{addition.id}: four-arm cases use different prompt sets")
+    pairs: list[FourArmCounts] = []
+    for prompt_id in addition.prompts:
+        if prompt_id not in prompts:
+            continue
+        for seed in seeds:
+            baseline = _read_response(run_dir, addition.control_arm, prompt_id, seed)
+            atomic = _read_response(run_dir, _case_treatment_arm(addition), prompt_id, seed)
+            rest_only = _read_response(run_dir, _case_treatment_arm(omission), prompt_id, seed)
+            full_rule = _read_response(run_dir, omission.control_arm, prompt_id, seed)
+            pairs.append(
+                (
+                    len(evaluator(baseline)),
+                    max(1, word_count(baseline)),
+                    len(evaluator(atomic)),
+                    max(1, word_count(atomic)),
+                    len(evaluator(rest_only)),
+                    max(1, word_count(rest_only)),
+                    len(evaluator(full_rule)),
+                    max(1, word_count(full_rule)),
+                )
+            )
+    return pairs
+
+
+def _build_four_arm_analyses(
+    run_dir: Path,
+    cases: dict[str, EvaluationCase],
+    scores: list[dict[str, Any]],
+    prompts: dict[str, PromptSpec],
+    seeds: tuple[int, ...],
+    equivalence_margin: float,
+) -> list[dict[str, Any]]:
+    """Build interaction records when all four directive-composition arms are complete."""
+    scores_by_id = {score["id"]: score for score in scores}
+    omissions = {
+        case.source_item_ids[0]: case
+        for case in cases.values()
+        if case.mode == "leave-one-out" and len(case.source_item_ids) == 1
+    }
+    analyses: list[dict[str, Any]] = []
+    for addition in cases.values():
+        if addition.mode not in {"one-at-a-time", "exemplar"}:
+            continue
+        omission = omissions.get(addition.id)
+        addition_score = scores_by_id.get(addition.id)
+        omission_score = scores_by_id.get(omission.id) if omission is not None else None
+        if omission is None or addition_score is None or omission_score is None:
+            continue
+
+        # Measure the expanded evaluator across matched prompt-seed quadruples
+        evaluator = EVALUATORS[addition.evaluator]
+        pairs = _collect_four_arm_pairs(run_dir, addition, omission, prompts, seeds, evaluator)
+        metrics = _four_arm_metrics(pairs)
+        addition_lower, addition_upper = addition_score["paired_rate_delta_ci95"]
+        isolated_interval = (-addition_upper, -addition_lower)
+        conditional_interval = tuple(omission_score["paired_rate_delta_ci95"])
+        occurrences = {
+            "baseline_occurrences": sum(pair[0] for pair in pairs),
+            "atomic_occurrences": sum(pair[2] for pair in pairs),
+            "rest_only_occurrences": sum(pair[4] for pair in pairs),
+            "full_rule_occurrences": sum(pair[6] for pair in pairs),
+        }
+        has_exposure = bool(
+            occurrences["rest_only_occurrences"] or occurrences["full_rule_occurrences"]
+        )
+        analysis: dict[str, Any] = {
+            "source_item_id": addition.id,
+            "evaluator": addition.evaluator,
+            "scoring_evaluator_version": evaluator_version(),
+            "evidence": addition.evidence,
+            "documents": len(pairs),
+            **occurrences,
+            **metrics,
+            "isolated_benefit_ci95": isolated_interval,
+            "conditional_benefit_ci95": conditional_interval,
+            "attenuation_ci95": _bootstrap_attenuation_interval(pairs),
+            "equivalence_margin_per_1000_words": equivalence_margin,
+            "conditional_contribution_status": _conditional_contribution_status(
+                conditional_interval,
+                equivalence_margin,
+                has_exposure=has_exposure,
+            ),
+        }
+
+        # Preserve a separate canonical-form interaction record where available
+        strict_evaluator = STRICT_EVALUATORS.get(addition.evaluator)
+        if strict_evaluator is not None:
+            strict_pairs = _collect_four_arm_pairs(
+                run_dir, addition, omission, prompts, seeds, strict_evaluator
+            )
+            strict_occurrences = {
+                "baseline_occurrences": sum(pair[0] for pair in strict_pairs),
+                "atomic_occurrences": sum(pair[2] for pair in strict_pairs),
+                "rest_only_occurrences": sum(pair[4] for pair in strict_pairs),
+                "full_rule_occurrences": sum(pair[6] for pair in strict_pairs),
+            }
+            strict_addition_lower, strict_addition_upper = addition_score["strict_view"][
+                "paired_rate_delta_ci95"
+            ]
+            strict_isolated_interval = (
+                -strict_addition_upper,
+                -strict_addition_lower,
+            )
+            strict_interval = tuple(omission_score["strict_view"]["paired_rate_delta_ci95"])
+            analysis["strict_view"] = {
+                **strict_occurrences,
+                **_four_arm_metrics(strict_pairs),
+                "isolated_benefit_ci95": strict_isolated_interval,
+                "conditional_benefit_ci95": strict_interval,
+                "attenuation_ci95": _bootstrap_attenuation_interval(strict_pairs),
+                "conditional_contribution_status": _conditional_contribution_status(
+                    strict_interval,
+                    equivalence_margin,
+                    has_exposure=bool(
+                        strict_occurrences["rest_only_occurrences"]
+                        or strict_occurrences["full_rule_occurrences"]
+                    ),
+                ),
+            }
+        else:
+            analysis["strict_view"] = None
+        analyses.append(analysis)
+    return sorted(analyses, key=lambda item: item["source_item_id"])
+
+
 def _source_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
-    """Render addition and omission effects beside their shared source item."""
+    """Render isolated and conditional benefits beside their shared source item."""
     comparisons: dict[str, dict[str, dict[str, Any]]] = {}
     for score in scores:
         source_ids = score.get("source_item_ids", [])
@@ -1654,23 +1858,84 @@ def _source_comparison_lines(scores: list[dict[str, Any]]) -> list[str]:
 
     lines = [
         "",
-        "## Source-item comparison",
+        "## Directive contribution summary",
         "",
-        "| Source item | Addition rate delta | Omission rate delta | Addition exposure | "
-        "Omission exposure | Evidence |",
+        "Positive benefits mean the directive reduced measured violations.",
+        "",
+        "| Source item | Isolated benefit | Conditional contribution | Atomic exposure | "
+        "Rest-only exposure | Evidence |",
         "|---|---:|---:|---|---|---|",
     ]
     for source_id, comparison in sorted(comparisons.items()):
         addition = comparison.get("addition")
         omission = comparison.get("omission")
-        addition_delta = f"{addition['rate_delta_per_1000_words']:.3f}" if addition else "pending"
-        omission_delta = f"{omission['rate_delta_per_1000_words']:.3f}" if omission else "pending"
+        isolated_benefit = "pending"
+        if addition:
+            benefit = -addition["rate_delta_per_1000_words"]
+            isolated_benefit = f"{0.0 if abs(benefit) < 0.0005 else benefit:.3f}"
+        conditional_contribution = (
+            f"{omission['rate_delta_per_1000_words']:.3f}" if omission else "pending"
+        )
         addition_exposure = addition["exposure_status"] if addition else "pending"
         omission_exposure = omission["exposure_status"] if omission else "pending"
         evidence = (addition or omission or {}).get("evidence") or "none"
         lines.append(
-            f"| `{source_id}` | {addition_delta} | {omission_delta} | "
+            f"| `{source_id}` | {isolated_benefit} | {conditional_contribution} | "
             f"{addition_exposure} | {omission_exposure} | {evidence} |"
+        )
+    return lines
+
+
+def _four_arm_analysis_lines(
+    analyses: list[dict[str, Any]], equivalence_margin: float
+) -> list[str]:
+    """Render isolated benefit, conditional contribution, and context interaction."""
+    if not analyses:
+        return []
+    lines = [
+        "",
+        "## Four-arm directive contribution",
+        "",
+        "Each count is followed by its rate per 1,000 response words. Positive benefits "
+        "mean fewer violations. Attenuation is isolated benefit minus conditional "
+        "contribution. Benefit retained is a descriptive ratio, while the confidence "
+        "intervals support inference.",
+        "",
+        f"The practical equivalence margin is {equivalence_margin:.3f} occurrences per "
+        "1,000 words.",
+        "",
+        "| Source item | Baseline | Atomic | Rest only | Full rule | Isolated benefit "
+        "(95% CI) | "
+        "Conditional contribution (95% CI) | Benefit retained | Attenuation (95% CI) | "
+        "Conditional status |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    for analysis in analyses:
+        isolated_lower, isolated_upper = analysis["isolated_benefit_ci95"]
+        conditional_lower, conditional_upper = analysis["conditional_benefit_ci95"]
+        attenuation_lower, attenuation_upper = analysis["attenuation_ci95"]
+        isolated_lower = 0.0 if abs(isolated_lower) < 0.0005 else isolated_lower
+        isolated_upper = 0.0 if abs(isolated_upper) < 0.0005 else isolated_upper
+        retained = analysis["benefit_retained"]
+        retained_text = "undefined" if retained is None else f"{retained:.1%}"
+        lines.append(
+            f"| `{analysis['source_item_id']}` | "
+            f"{analysis['baseline_occurrences']} "
+            f"({analysis['baseline_rate_per_1000_words']:.3f}) | "
+            f"{analysis['atomic_occurrences']} "
+            f"({analysis['atomic_rate_per_1000_words']:.3f}) | "
+            f"{analysis['rest_only_occurrences']} "
+            f"({analysis['rest_only_rate_per_1000_words']:.3f}) | "
+            f"{analysis['full_rule_occurrences']} "
+            f"({analysis['full_rule_rate_per_1000_words']:.3f}) | "
+            f"{analysis['isolated_benefit_per_1000_words']:.3f} "
+            f"[{isolated_lower:.3f}, {isolated_upper:.3f}] | "
+            f"{analysis['conditional_benefit_per_1000_words']:.3f} "
+            f"[{conditional_lower:.3f}, {conditional_upper:.3f}] | "
+            f"{retained_text} | "
+            f"{analysis['attenuation_per_1000_words']:.3f} "
+            f"[{attenuation_lower:.3f}, {attenuation_upper:.3f}] | "
+            f"{analysis['conditional_contribution_status']} |"
         )
     return lines
 
@@ -1744,8 +2009,11 @@ def write_report(
     prompts: dict[str, PromptSpec],
     cases: dict[str, EvaluationCase],
     seeds: tuple[int, ...],
+    equivalence_margin: float = DEFAULT_EQUIVALENCE_MARGIN,
 ) -> Path:
-    """Score complete validated cases and identify arms still pending."""
+    """Score complete cases, four-arm interactions, and pending response arms."""
+    if not math.isfinite(equivalence_margin) or equivalence_margin < 0:
+        raise ValueError("equivalence margin must be a finite non-negative number")
     scores: list[dict[str, Any]] = []
     pending: dict[str, list[str]] = {}
     jobs = {(job.arm, job.prompt.id, job.seed): job for job in build_jobs(cases, prompts, seeds)}
@@ -1756,7 +2024,19 @@ def write_report(
             continue
         scores.append(_score_case(run_dir, case, prompts, seeds))
     scores.sort(key=lambda item: item["id"])
+    analyses = _build_four_arm_analyses(
+        run_dir,
+        cases,
+        scores,
+        prompts,
+        seeds,
+        equivalence_margin,
+    )
     _atomic_write(run_dir / "scores.json", json.dumps(scores, indent=2, sort_keys=True) + "\n")
+    _atomic_write(
+        run_dir / "interactions.json",
+        json.dumps(analyses, indent=2, sort_keys=True) + "\n",
+    )
 
     lines = [
         "# Counterfactual rule evaluation",
@@ -1782,6 +2062,7 @@ def write_report(
 
     lines.extend(_sensitivity_lines(scores))
     lines.extend(_source_comparison_lines(scores))
+    lines.extend(_four_arm_analysis_lines(analyses, equivalence_margin))
     lines.extend(_trial_comparison_lines(scores))
     if pending:
         lines.extend(["", "## Pending cases", ""])
@@ -2041,6 +2322,12 @@ def main() -> None:
 
     report_parser = subparsers.add_parser("report", help="score a completed artifact run")
     report_parser.add_argument("--run-id", help="artifact run id; defaults to latest")
+    report_parser.add_argument(
+        "--equivalence-margin",
+        type=float,
+        default=DEFAULT_EQUIVALENCE_MARGIN,
+        help="practical conditional-effect margin per 1,000 response words",
+    )
 
     calibrate_parser = subparsers.add_parser(
         "calibrate", help="prepare real matches and sampled nonmatches for review"
@@ -2059,7 +2346,14 @@ def main() -> None:
             run_dir = _resolve_run_dir(args.run_id) if args.run_id else _latest_run()
             config, prompts, cases, seeds = _load_manifest_run(run_dir)
             if args.command == "report":
-                report = write_report(run_dir, config, prompts, cases, seeds)
+                report = write_report(
+                    run_dir,
+                    config,
+                    prompts,
+                    cases,
+                    seeds,
+                    equivalence_margin=args.equivalence_margin,
+                )
                 print(f"Wrote {report.relative_to(REPO)}")
                 return
             if args.nonmatches < 1:
