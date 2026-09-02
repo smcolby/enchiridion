@@ -11,6 +11,8 @@ The repo implements two companion patterns:
 - **[patterns/cross-harness-config-pattern.md](patterns/cross-harness-config-pattern.md)**: the distribution system; how one canonical source reaches many harnesses (blocks, fences, rendering, symlinks, verification).
 - **[patterns/agentic-infrastructure-pattern.md](patterns/agentic-infrastructure-pattern.md)**: the content architecture; what that content is, how it is layered and scoped, and when the model sees it.
 
+The **[atomic rule source template](patterns/atomic-rule-template.md)** defines the implicit Markdown structure used to derive counterfactual treatments directly from canonical doctrine and rules.
+
 This repository is one *instance* of those patterns, fitted to its owner's harnesses, languages, and conventions. To adopt the approach, point your LLM at the two pattern documents and mint your own instance; this repo then serves as a worked reference and starting point rather than something to fork wholesale.
 
 Design rationale lives in the patterns. This README covers what is here and how to use it.
@@ -49,8 +51,8 @@ shared/        canonical content
   seeds/       repo archetypes: AGENTS.md template, gate configs, rule selection
   models/      shared model-provider configs
 harnesses/     per-harness composition: instruction file + configs + rendered agents
-patterns/      the two pattern documents this repo implements
-tools/         sync, verify, report, bootstrap, render_rules + the harness registry
+patterns/      design patterns plus the atomic rule source template
+tools/         sync, verify, report, bootstrap, renderers + the harness registry
 ```
 
 ## Common tasks
@@ -94,7 +96,8 @@ Personas carry stance only; procedure belongs in a playbook, conventions in a ru
 
 | Check | Command | When |
 |---|---|---|
-| Congruence, schemas, doctrine budget | `python tools/verify.py` | Pre-commit (automatic) |
+| Congruence, schemas, source template, doctrine budget | `python tools/verify.py` | Pre-commit (automatic) |
+| Atomic doctrine and rule map | `python tools/rule_template.py --write-audit` | Before evaluator changes or after source restructuring |
 | Live topology: wiring, symlinks, rules, drift | `python tools/report.py` | When things feel off |
 | Content rot: stale rules, pins, redundancy | `catalog-audit` skill | Scheduled; after model or stack upgrades |
 
