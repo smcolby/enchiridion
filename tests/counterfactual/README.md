@@ -85,6 +85,11 @@ responses for manual boundary review:
 python tools/counterfactual_eval.py calibrate --run-id <run-id> --nonmatches 10
 ```
 
+Strict vocabulary scoring excludes `navigate` and `leverage` because their
+canonical restrictions depend on figurative use and part of speech. The expanded
+view includes those terms and their regular inflections as a lexical sensitivity
+measure, so contextual false positives remain possible in that view.
+
 Raw prose, request metadata, scores, and reports live under
 `.counterfactual-artifacts/`. The directory is ignored by git. Cache identity
 includes the Ollama version, model digest, generation settings, prompts, and seed

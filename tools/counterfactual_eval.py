@@ -507,6 +507,16 @@ def _matches(text: str, pattern: re.Pattern[str]) -> list[Occurrence]:
     return occurrences
 
 
+def _group_matches(text: str, pattern: re.Pattern[str], group: int | str) -> list[Occurrence]:
+    """Convert one regex capture group into auditable response spans."""
+    occurrences: list[Occurrence] = []
+    for match in pattern.finditer(text):
+        start, end = match.span(group)
+        snippet = " ".join(text[max(0, start - 60) : min(len(text), end + 60)].split())
+        occurrences.append(Occurrence(start=start, end=end, snippet=snippet))
+    return occurrences
+
+
 def evaluate_antithesis_pivot_strict(text: str) -> list[Occurrence]:
     """Find only the antithesis forms explicitly named by the canonical directive."""
     prose = _visible_prose(text)
@@ -534,12 +544,23 @@ def evaluate_antithesis_pivot(text: str) -> list[Occurrence]:
         rf"(?:isn|wasn|aren|weren)[’']t)|{contracted_subject}[ \t]+not)"
     )
     positive_copula = rf"(?:{subject}[ \t]+(?:is|was|are|were)|{contracted_subject})"
+    pronoun = r"(?:it|this|that)"
+    pronoun_negative = (
+        rf"(?:{pronoun}[ \t]+(?:(?:is|was)[ \t]+not|(?:isn|wasn)[’']t)|"
+        rf"{pronoun}[’']s[ \t]+not)"
+    )
+    pronoun_positive = rf"(?:{pronoun}[ \t]+(?:is|was)|{pronoun}[’']s)"
     pattern = re.compile(
-        rf"\b{negative_copula}\b[^.!?\n]{{1,140}}?[,;:]\s*"
-        rf"(?:(?:but|rather|instead)\s*,?\s*)?{positive_copula}\b|"
-        r"\b(?:not|(?:isn|wasn|aren|weren)[’']t)\s+(?:just|merely|only)\b"
-        r"[^.!?\n]{1,140}?\bbut(?:\s+also)?\b|"
-        r"\bnot\b[^.!?\n]{1,140}?[,;:]\s*(?:but\s+rather|rather|instead)\b",
+        rf"\b{pronoun_negative}\b[^.!?\n]{{1,140}}?[,;:][ \t]*"
+        rf"{pronoun_positive}\b|"
+        rf"\b{negative_copula}\b[^.!?\n]{{1,140}}?(?:"
+        rf"(?:,[ \t]*(?:but|rather|instead)[ \t]*,?[ \t]*|"
+        rf"[;:][ \t]*(?:(?:but|rather|instead)[ \t]*,?[ \t]*)?)"
+        rf"{positive_copula}\b|"
+        r"(?:[ \t]+|[,;:][ \t]*)(?:but(?:[ \t]+(?:also|rather))?|rather|instead)\b)|"
+        r"\b(?:not|(?:isn|wasn|aren|weren)[’']t)[ \t]+"
+        r"(?:just|merely|only|solely)\b[^.!?\n]{1,140}?\bbut(?:[ \t]+also)?\b|"
+        r"\bnot\b[^.!?\n]{1,140}?[,;:][ \t]*(?:but[ \t]+rather|rather|instead)\b",
         re.IGNORECASE,
     )
     return _matches(prose, pattern)
@@ -602,36 +623,64 @@ def evaluate_filler_opening(text: str) -> list[Occurrence]:
     ]
 
 
-def evaluate_concluding_summary_strict(text: str) -> list[Occurrence]:
-    """Find only conclusion markers explicitly named by the canonical directive."""
+def _conclusion_region(text: str) -> tuple[str, int]:
+    """Return the final response region where a concluding transition can occur."""
     prose = _visible_prose(text)
-    offset = max(0, len(prose) - 800)
-    pattern = re.compile(
-        r"\b(?:ultimately|in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all)\b",
+    region_length = max(800, int(len(prose) * 0.15))
+    offset = max(0, len(prose) - region_length)
+    return prose[offset:], offset
+
+
+def _conclusion_occurrences(
+    text: str, explicit_pattern: re.Pattern[str]
+) -> tuple[list[Occurrence], int]:
+    """Find explicit and sentence-opening conclusion markers in the final region."""
+    region, offset = _conclusion_region(text)
+    occurrences = _matches(region, explicit_pattern)
+    response_start = r"^|" if offset == 0 else ""
+    ultimately_pattern = re.compile(
+        rf"(?:{response_start}[.!?][ \t]+|\n[ \t]*)(ultimately)\b"
+        r"(?=[ \t]*[,;:])",
         re.IGNORECASE,
     )
-    found = _matches(prose[offset:], pattern)
+    occurrences.extend(_group_matches(region, ultimately_pattern, 1))
+    return occurrences, offset
+
+
+def _shift_occurrences(occurrences: list[Occurrence], offset: int) -> list[Occurrence]:
+    """Shift region-local occurrence spans into original response coordinates."""
     return [
         Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
-        for item in found
+        for item in sorted(occurrences, key=lambda item: item.start)
     ]
 
 
+def evaluate_concluding_summary_strict(text: str) -> list[Occurrence]:
+    """Find only conclusion markers explicitly named by the canonical directive."""
+    explicit_pattern = re.compile(
+        r"\b(?:in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all)\b",
+        re.IGNORECASE,
+    )
+    occurrences, offset = _conclusion_occurrences(text, explicit_pattern)
+    return _shift_occurrences(occurrences, offset)
+
+
 def evaluate_concluding_summary(text: str) -> list[Occurrence]:
-    """Find unprompted summary markers near the end of a response."""
-    prose = _visible_prose(text)
-    offset = max(0, len(prose) - 800)
-    pattern = re.compile(
-        r"\b(?:ultimately|in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all|"
+    """Find high-precision summary transitions near the end of a response."""
+    explicit_pattern = re.compile(
+        r"\b(?:in[ \t]+conclusion|in[ \t]+summary|all[ \t]+in[ \t]+all|"
         r"to[ \t]+summarize|to[ \t]+sum[ \t]+up|to[ \t]+conclude|in[ \t]+closing|"
         r"by[ \t]+way[ \t]+of[ \t]+conclusion)\b",
         re.IGNORECASE,
     )
-    found = _matches(prose[offset:], pattern)
-    return [
-        Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
-        for item in found
-    ]
+    occurrences, offset = _conclusion_occurrences(text, explicit_pattern)
+    region, _ = _conclusion_region(text)
+    heading_pattern = re.compile(
+        r"^[ \t]{0,3}#{1,6}[ \t]+(?:conclusion|summary)\b",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    occurrences.extend(_matches(region, heading_pattern))
+    return _shift_occurrences(occurrences, offset)
 
 
 def evaluate_banned_vocabulary_strict(text: str) -> list[Occurrence]:
@@ -645,8 +694,6 @@ def evaluate_banned_vocabulary_strict(text: str) -> list[Occurrence]:
         "pivotal",
         "landscape",
         "realm",
-        "navigate",
-        "leverage",
         "seamless",
     )
     pattern = re.compile(rf"\b(?:{'|'.join(words)})\b", re.IGNORECASE)

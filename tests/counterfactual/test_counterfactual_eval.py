@@ -374,6 +374,26 @@ def test_antithesis_evaluator_finds_variants_and_ignores_plain_contrast() -> Non
     assert len(found) == 5
 
 
+def test_antithesis_evaluator_rejects_false_grammatical_pivots() -> None:
+    """Require a positive contrast instead of nearby unrelated copulas."""
+    positives = (
+        "The unit is not a character or word, but a token. "
+        "PXR is not solely a xenobiotic sensor but also regulates homeostasis."
+    )
+    negatives = (
+        "It wasn't until Tuesday that he climbed the ladder, flashlight in hand, "
+        "and noticed the handle was warm. "
+        "An army that is not loyal to the state, or that is stronger than its state, "
+        "poses a risk. PXR is not activated by rifampin, which is potent in humans."
+    )
+
+    positive_matches = evaluation.evaluate_antithesis_pivot(positives)
+    negative_matches = evaluation.evaluate_antithesis_pivot(negatives)
+
+    assert len(positive_matches) == 2
+    assert negative_matches == []
+
+
 def test_strict_views_preserve_canonical_surface_form_boundaries() -> None:
     """Keep exact directive forms visible beside broader sensitivity matches."""
     antithesis = "It's not delay, it's uncertainty. It is not speed, but rather consistency."
@@ -448,6 +468,25 @@ def test_conclusion_evaluator_finds_explicit_summary_variants() -> None:
     assert len(found) == 5
 
 
+def test_conclusion_evaluator_covers_long_sections_without_causal_adverbs() -> None:
+    """Find long concluding sections without treating causal adverbs as summaries."""
+    long_conclusion = (
+        f"{'Neutral body text. ' * 500}"
+        "In conclusion, the evidence remains bounded. "
+        f"{'Supporting detail. ' * 60}"
+    )
+    heading = f"{'Neutral body text. ' * 100}\n## Conclusion\nThe evidence remains bounded."
+    causal = "The intervention reduced clearance, ultimately increasing exposure."
+
+    strict_long = evaluation.evaluate_concluding_summary_strict(long_conclusion)
+    expanded_heading = evaluation.evaluate_concluding_summary(heading)
+    causal_matches = evaluation.evaluate_concluding_summary(causal)
+
+    assert len(strict_long) == 1
+    assert len(expanded_heading) == 1
+    assert causal_matches == []
+
+
 def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:
     """Restrict opening and conclusion markers to their stated positions."""
     middle = "In summary, this phrase is discussed as an example. "
@@ -497,6 +536,17 @@ def test_banned_vocabulary_evaluator_is_case_insensitive() -> None:
     )
 
     assert len(found) == 2
+
+
+def test_strict_vocabulary_excludes_context_qualified_terms() -> None:
+    """Reserve semantically qualified terms for the expanded lexical view."""
+    text = "Boats navigate the river while commanders seek political leverage."
+
+    strict = evaluation.evaluate_banned_vocabulary_strict(text)
+    expanded = evaluation.evaluate_banned_vocabulary(text)
+
+    assert strict == []
+    assert len(expanded) == 2
 
 
 def test_banned_vocabulary_evaluator_finds_inflected_forms() -> None:
