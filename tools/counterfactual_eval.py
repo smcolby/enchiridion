@@ -19,7 +19,7 @@ import sys
 import threading
 import tomllib
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -338,6 +338,12 @@ def load_cases() -> dict[str, EvaluationCase]:
         exemplar = cases[binding.source_item_id]
         parent = cases[binding.parent]
         composite_id = composite_id_for(parent.id, exemplar.id)
+        composite_treatment = "\n\n".join(
+            (
+                _require_string(parent.treatment, f"{parent.id}.treatment"),
+                _require_string(exemplar.treatment, f"{exemplar.id}.treatment"),
+            )
+        )
         cases[composite_id] = EvaluationCase(
             id=composite_id,
             kind="composite",
@@ -350,6 +356,7 @@ def load_cases() -> dict[str, EvaluationCase]:
             components=(parent.id, exemplar.id),
             evidence=binding.evidence,
             mode="composite",
+            treatment_hash=treatment_hash(composite_treatment),
         )
 
     # Share one complete-rule response arm across evaluator-specific comparisons
@@ -433,6 +440,8 @@ def validate_inventory(
         elif case.kind == "composite":
             if len(case.components) < 2 or case.treatment is not None:
                 errors.append(f"{case.id}: composite requires components and no copied treatment")
+            elif case.treatment_hash != treatment_hash(instruction_for_case(case.id, cases)):
+                errors.append(f"{case.id}: composite treatment hash does not match components")
         elif case.kind == "full-rule":
             if not case.treatment or case.control_arm != "baseline":
                 errors.append(
@@ -1046,6 +1055,11 @@ def _write_manifest(
         normalized_case = asdict(_case_from_manifest_item(case))
         if previous is not None:
             normalized_previous = asdict(_case_from_manifest_item(previous))
+            if (
+                normalized_previous.get("kind") == "composite"
+                and normalized_previous.get("treatment_hash") is None
+            ):
+                normalized_previous["treatment_hash"] = normalized_case["treatment_hash"]
             if _stable_hash(normalized_previous) != _stable_hash(normalized_case):
                 raise ValueError(f"case '{case_id}' changed within experiment manifest")
         existing_cases[case_id] = normalized_case
@@ -1635,6 +1649,12 @@ def _load_manifest_run(
         for item in raw["cases"]
         if isinstance(item, dict)
     }
+    for case_id, case in tuple(cases.items()):
+        if case.kind == "composite" and case.treatment_hash is None:
+            cases[case_id] = replace(
+                case,
+                treatment_hash=treatment_hash(instruction_for_case(case_id, cases)),
+            )
     return config, prompts, cases, seeds
 
 

@@ -90,6 +90,7 @@ def test_exemplar_and_generated_composite_render_canonical_treatments() -> None:
     assert directive == canonical[ANTITHESIS_ID]
     assert exemplar == canonical[ANTITHESIS_EXEMPLAR_ID]
     assert composite == f"{directive}\n\n{exemplar}"
+    assert cases[composite_id].treatment_hash == evaluation.treatment_hash(composite)
 
 
 def test_cases_include_full_rule_and_atomic_leave_one_out_treatments() -> None:
