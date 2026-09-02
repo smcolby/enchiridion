@@ -6,13 +6,15 @@ does not load instructions, skills, agents, or settings from any coding harness.
 
 ## Experimental arms
 
-Every prompt and seed has one shared baseline. Declarative case files then add one
-instruction to the same base system message. Three treatment kinds are supported:
+Every prompt and seed has one shared baseline. `tools/rule_template.py` derives
+atomic items and identifiers directly from canonical Markdown. Evaluator bindings
+select source-derived identifiers without copying instruction text. Three treatment
+kinds are supported:
 
-- `directive`: one atomic instruction from a canonical block or rule
-- `anti-hallucination`: one banned/correct exemplar pair linked to its parent
+- `directive`: one canonical top-level list item or directive paragraph
+- `anti-hallucination`: one canonical banned/correct table row linked to its parent
   directive
-- `composite`: a parent directive and exemplar together, used to measure whether
+- `composite`: a generated parent-plus-exemplar treatment used to measure whether
   the example adds value in the context where it is deployed
 
 Anti-hallucination rows are tested one at a time. They remain a distinct evidence
@@ -20,9 +22,10 @@ class because many record a failure observed in real work. A zero ecological
 baseline does not erase that provenance. Compare the exemplar arm with both its
 parent directive and their composite before deciding whether the row is useful.
 
-Each case stores a normalized snapshot of its canonical source. The inventory
-check fails when that text disappears or becomes ambiguous, forcing changed rules
-to receive a new evaluation.
+Case identifiers contain the canonical artifact, section, content slug, and content
+hash. Treatments are read from the parsed source item at runtime. A source edit
+changes the identifier, makes its evaluator binding stale, and invalidates the
+corresponding cached treatment without duplicating prose in this suite.
 
 ## Commands
 

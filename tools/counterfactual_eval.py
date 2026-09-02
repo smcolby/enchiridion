@@ -24,10 +24,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+import rule_template
+
 REPO = Path(__file__).parent.parent
 DEFAULT_CONFIG = REPO / "tests/counterfactual/config.toml"
 DEFAULT_PROMPTS = REPO / "tests/counterfactual/prompts.toml"
-DEFAULT_CASES = REPO / "tests/counterfactual/cases"
 ARTIFACTS_DIR = REPO / ".counterfactual-artifacts"
 MODEL_ID = "qwen3.8:27b-iq4xs"
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
@@ -65,20 +66,29 @@ class PromptSpec:
 
 @dataclass(frozen=True)
 class EvaluationCase:
-    """Describe one directive, exemplar, or composed treatment."""
+    """Describe one source-derived directive, exemplar, or composed treatment."""
 
     id: str
     kind: str
     source: str
     section: str
-    source_match: str
     evaluator: str
     prompts: tuple[str, ...]
-    instruction: str | None = None
-    banned: str | None = None
-    correct: str | None = None
+    source_item_ids: tuple[str, ...]
+    treatment: str | None = None
     parent: str | None = None
     components: tuple[str, ...] = ()
+    evidence: str | None = None
+
+
+@dataclass(frozen=True)
+class EvaluationBinding:
+    """Assign deterministic scoring metadata to one canonical source item."""
+
+    source_item_id: str
+    evaluator: str
+    prompts: tuple[str, ...]
+    parent: str | None = None
     evidence: str | None = None
 
 
@@ -190,94 +200,100 @@ def load_prompts(path: Path = DEFAULT_PROMPTS) -> dict[str, PromptSpec]:
     return prompts
 
 
-def _case_from_data(path: Path, data: dict[str, Any]) -> EvaluationCase:
-    """Parse one declarative case file into a validated treatment specification."""
-    case_id = _validate_id(_require_string(data.get("id"), f"{path}.id"), "case id")
-    prompts = data.get("prompts")
-    if (
-        not isinstance(prompts, list)
-        or not prompts
-        or not all(isinstance(prompt, str) for prompt in prompts)
-    ):
-        raise ValueError(f"{path}: prompts must be a non-empty string array")
-
-    components = data.get("components", [])
-    if not isinstance(components, list) or not all(isinstance(item, str) for item in components):
-        raise ValueError(f"{path}: components must be a string array")
-
-    return EvaluationCase(
-        id=case_id,
-        kind=_require_string(data.get("kind"), f"{path}.kind"),
-        source=_require_string(data.get("source"), f"{path}.source"),
-        section=_require_string(data.get("section"), f"{path}.section"),
-        source_match=_require_string(data.get("source_match"), f"{path}.source_match"),
-        evaluator=_require_string(data.get("evaluator"), f"{path}.evaluator"),
-        prompts=tuple(prompts),
-        instruction=data.get("instruction"),
-        banned=data.get("banned"),
-        correct=data.get("correct"),
-        parent=data.get("parent"),
-        components=tuple(components),
-        evidence=data.get("evidence"),
-    )
+def _canonical_source_items() -> dict[str, rule_template.SourceItem]:
+    """Index every structurally derived canonical source item by identifier."""
+    return {item.id: item for artifact in rule_template.load_inventory() for item in artifact.items}
 
 
-def load_cases(path: Path = DEFAULT_CASES) -> dict[str, EvaluationCase]:
-    """Load all atomic and composed case specifications."""
+def composite_id_for(parent_id: str, exemplar_id: str) -> str:
+    """Derive one composite arm identifier entirely from its source components."""
+    digest = hashlib.sha256(f"{parent_id}\n{exemplar_id}".encode()).hexdigest()[:8]
+    return f"{parent_id}.with-exemplar-{digest}"
+
+
+def load_cases() -> dict[str, EvaluationCase]:
+    """Build screening cases from canonical source items and evaluator bindings."""
+    source_items = _canonical_source_items()
     cases: dict[str, EvaluationCase] = {}
-    for case_path in sorted(path.rglob("*.toml")):
-        with case_path.open("rb") as handle:
-            raw = _require_mapping(tomllib.load(handle), str(case_path))
-            case = _case_from_data(case_path, raw)
-        if case.id in cases:
-            raise ValueError(f"duplicate case id '{case.id}'")
-        cases[case.id] = case
+    for binding in SCREENING_BINDINGS:
+        item = source_items.get(binding.source_item_id)
+        if item is None:
+            raise ValueError(f"stale evaluator binding '{binding.source_item_id}'")
+        if item.kind not in {"directive", "anti-hallucination"} or item.treatment is None:
+            raise ValueError(
+                f"evaluator binding '{binding.source_item_id}' does not name a treatment"
+            )
+        if binding.source_item_id in cases:
+            raise ValueError(f"duplicate evaluator binding '{binding.source_item_id}'")
+        cases[binding.source_item_id] = EvaluationCase(
+            id=binding.source_item_id,
+            kind=item.kind,
+            source=item.path,
+            section=item.section,
+            evaluator=binding.evaluator,
+            prompts=binding.prompts,
+            source_item_ids=(item.id,),
+            treatment=item.treatment,
+            parent=binding.parent,
+            evidence=binding.evidence,
+        )
+
+    for binding in SCREENING_BINDINGS:
+        if binding.parent is None:
+            continue
+        if binding.parent not in cases:
+            raise ValueError(
+                f"evaluator binding '{binding.source_item_id}' has unknown parent "
+                f"'{binding.parent}'"
+            )
+        exemplar = cases[binding.source_item_id]
+        parent = cases[binding.parent]
+        composite_id = composite_id_for(parent.id, exemplar.id)
+        cases[composite_id] = EvaluationCase(
+            id=composite_id,
+            kind="composite",
+            source=exemplar.source,
+            section=f"{parent.section}; {exemplar.section}",
+            evaluator=binding.evaluator,
+            prompts=binding.prompts,
+            source_item_ids=(parent.id, exemplar.id),
+            parent=parent.id,
+            components=(parent.id, exemplar.id),
+            evidence=binding.evidence,
+        )
     if not cases:
         raise ValueError("the case inventory is empty")
     return cases
 
 
-def _normalize_space(text: str) -> str:
-    """Collapse Markdown wrapping so source snapshots survive harmless reflow."""
-    return " ".join(text.split())
-
-
 def validate_inventory(
     cases: dict[str, EvaluationCase], prompts: dict[str, PromptSpec]
 ) -> list[str]:
-    """Return inventory errors without performing network requests."""
+    """Return source identity and scoring metadata errors without network requests."""
     errors: list[str] = []
+    source_items = _canonical_source_items()
     for case in cases.values():
-        source = REPO / case.source
-        if not source.is_file():
-            errors.append(f"{case.id}: source does not exist: {case.source}")
-            continue
-
-        # Require each experimental snapshot to map uniquely to canonical content
-        normalized_source = _normalize_space(source.read_text())
-        source_count = normalized_source.count(_normalize_space(case.source_match))
-        if source_count != 1:
-            errors.append(
-                f"{case.id}: source_match occurs {source_count} times in {case.source}; expected 1"
-            )
         if case.evaluator not in EVALUATORS:
             errors.append(f"{case.id}: unknown evaluator '{case.evaluator}'")
         for prompt_id in case.prompts:
             if prompt_id not in prompts:
                 errors.append(f"{case.id}: unknown prompt '{prompt_id}'")
+        for source_item_id in case.source_item_ids:
+            if source_item_id not in source_items:
+                errors.append(f"{case.id}: unknown source item '{source_item_id}'")
 
-        # Keep directive, exemplar, and composite semantics explicit
-        if case.kind == "directive":
-            if not case.instruction:
-                errors.append(f"{case.id}: directive requires instruction")
-        elif case.kind == "anti-hallucination":
-            if not case.banned or not case.correct or not case.parent:
-                errors.append(
-                    f"{case.id}: anti-hallucination case requires banned, correct, and parent"
-                )
+        # Keep atomic and generated composite semantics explicit
+        if case.kind in {"directive", "anti-hallucination"}:
+            if case.source_item_ids != (case.id,):
+                errors.append(f"{case.id}: atomic case must use its source-derived id")
+            source_item = source_items.get(case.id)
+            if source_item and case.treatment != source_item.treatment:
+                errors.append(f"{case.id}: treatment differs from canonical source")
+            if case.kind == "anti-hallucination" and not case.parent:
+                errors.append(f"{case.id}: anti-hallucination case requires a parent")
         elif case.kind == "composite":
-            if len(case.components) < 2:
-                errors.append(f"{case.id}: composite requires at least two components")
+            if len(case.components) < 2 or case.treatment is not None:
+                errors.append(f"{case.id}: composite requires components and no copied treatment")
         else:
             errors.append(f"{case.id}: unsupported kind '{case.kind}'")
 
@@ -292,17 +308,13 @@ def validate_inventory(
 def instruction_for_case(
     case_id: str, cases: dict[str, EvaluationCase], active: tuple[str, ...] = ()
 ) -> str:
-    """Render the exact system-message addition for one treatment case."""
+    """Render the exact canonical system-message addition for one treatment case."""
     if case_id in active:
         cycle = " -> ".join((*active, case_id))
         raise ValueError(f"case component cycle: {cycle}")
     case = cases[case_id]
-    if case.kind == "directive":
-        return _require_string(case.instruction, f"{case.id}.instruction")
-    if case.kind == "anti-hallucination":
-        banned = _require_string(case.banned, f"{case.id}.banned")
-        correct = _require_string(case.correct, f"{case.id}.correct")
-        return f"Banned: {banned}\nCorrect: {correct}"
+    if case.kind in {"directive", "anti-hallucination"}:
+        return _require_string(case.treatment, f"{case.id}.treatment")
     if case.kind == "composite":
         return "\n\n".join(
             instruction_for_case(component, cases, (*active, case_id))
@@ -396,6 +408,62 @@ EVALUATORS: dict[str, Evaluator] = {
     "concluding-summary": evaluate_concluding_summary,
     "banned-vocabulary": evaluate_banned_vocabulary,
 }
+ALL_PROMPT_IDS = (
+    "history-fall-of-rome",
+    "science-pregnane-x-receptor",
+    "technical-llm-architecture",
+    "creative-time-dilated-door",
+)
+ANTITHESIS_ID = "writing-conventions.rhetoric-and-structure.never-use-the-it-s-not-x-it-s-ea68a7b2"
+ANTITHESIS_EXEMPLAR_ID = (
+    "writing-conventions.anti-hallucination.it-s-not-a-hyperparameter-it-s-a-design-c2cbb66c"
+)
+SCREENING_BINDINGS = (
+    EvaluationBinding(
+        source_item_id=ANTITHESIS_ID,
+        evaluator="antithesis-pivot",
+        prompts=ALL_PROMPT_IDS,
+    ),
+    EvaluationBinding(
+        source_item_id=(
+            "writing-conventions.punctuation."
+            "never-use-em-dashes-en-dashes-or-sequential-hyphens-6a4e9328"
+        ),
+        evaluator="dash-interruption",
+        prompts=ALL_PROMPT_IDS,
+    ),
+    EvaluationBinding(
+        source_item_id=(
+            "writing-conventions.rhetoric-and-structure."
+            "no-conversational-filler-or-throat-clearing-openers-sure-here-27c139c4"
+        ),
+        evaluator="filler-opening",
+        prompts=ALL_PROMPT_IDS,
+    ),
+    EvaluationBinding(
+        source_item_id=(
+            "writing-conventions.rhetoric-and-structure."
+            "no-unprompted-concluding-summary-ultimately-in-conclusion-in-summary-7345f2e1"
+        ),
+        evaluator="concluding-summary",
+        prompts=ALL_PROMPT_IDS,
+    ),
+    EvaluationBinding(
+        source_item_id=(
+            "writing-conventions.banned-vocabulary."
+            "avoid-the-overused-ai-register-delve-tapestry-beacon-testament-ffb2ab6f"
+        ),
+        evaluator="banned-vocabulary",
+        prompts=ALL_PROMPT_IDS,
+    ),
+    EvaluationBinding(
+        source_item_id=ANTITHESIS_EXEMPLAR_ID,
+        evaluator="antithesis-pivot",
+        prompts=ALL_PROMPT_IDS,
+        parent=ANTITHESIS_ID,
+        evidence="observed-failure",
+    ),
+)
 
 
 def _request_json(
@@ -837,8 +905,12 @@ def _selected_cases(
 
 
 def _latest_run() -> Path:
-    """Return the most recently modified artifact run."""
-    runs = [path for path in ARTIFACTS_DIR.glob("*") if path.is_dir()]
+    """Return the most recently modified artifact directory with a run manifest."""
+    runs = [
+        path
+        for path in ARTIFACTS_DIR.glob("*")
+        if path.is_dir() and (path / "manifest.json").is_file()
+    ]
     if not runs:
         raise FileNotFoundError("no counterfactual artifact runs found")
     return max(runs, key=lambda path: path.stat().st_mtime)
@@ -855,6 +927,7 @@ def _load_manifest_run(
             **{
                 **item,
                 "prompts": tuple(item["prompts"]),
+                "source_item_ids": tuple(item["source_item_ids"]),
                 "components": tuple(item.get("components", [])),
             }
         )

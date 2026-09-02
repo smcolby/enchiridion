@@ -44,6 +44,18 @@ def test_source_derived_identifiers_are_globally_unique() -> None:
     assert len(identifiers) == len(set(identifiers))
 
 
+def test_banned_vocabulary_prose_is_a_candidate_treatment() -> None:
+    inventory = template.load_inventory()
+    items = {item.id: item for artifact in inventory for item in artifact.items}
+    item_id = (
+        "writing-conventions.banned-vocabulary."
+        "avoid-the-overused-ai-register-delve-tapestry-beacon-testament-ffb2ab6f"
+    )
+
+    assert items[item_id].kind == "directive"
+    assert items[item_id].treatment is not None
+
+
 def test_markdown_table_parser_preserves_escaped_pipes() -> None:
     row = template._split_table_row(r"| `X \| None` | `X or None` |")
 

@@ -29,6 +29,7 @@ LIST_ITEM_RE = re.compile(r"^(?P<marker>-|\d+\.)\s+(?P<text>.+)$")
 TABLE_SEPARATOR_RE = re.compile(r"^:?-{3,}:?$")
 WORD_RE = re.compile(r"[a-z0-9]+")
 REFERENCE_SECTIONS = {"reference", "references", "reference exemplar", "see also"}
+DIRECTIVE_PROSE_SECTIONS = {"banned vocabulary"}
 COMPOUND_CUE_RE = re.compile(
     r"(?:^|[.;!?]\s+)(?:do not|never|avoid|prefer|require|validate|report|state|write|"
     r"keep|use|run|preserve|define|catch|log|document|treat|ensure|reject|store)\b",
@@ -234,7 +235,7 @@ def _section_kind(section: str, block_kind: str, marker: str | None) -> str:
         return "enforcement"
     if normalized in REFERENCE_SECTIONS:
         return "reference"
-    if block_kind == "paragraph":
+    if block_kind == "paragraph" and normalized not in DIRECTIVE_PROSE_SECTIONS:
         return "context"
     return "directive"
 

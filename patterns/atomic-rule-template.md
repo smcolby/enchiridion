@@ -75,6 +75,7 @@ The parser assigns content by its implicit location:
 | prose before the first H2 in a rule | role |
 | numbered item under `Principles` | principle |
 | top-level bullet under a concern section | directive |
+| prose under `Banned vocabulary` | directive |
 | row under `Anti-hallucination` | anti-hallucination |
 | prose or items under `Scope` | scope |
 | prose or items under `Enforcement` | enforcement |
