@@ -780,14 +780,14 @@ def _bootstrap_delta_interval(
     if not pairs:
         return 0.0, 0.0
 
-    # A fixed linear congruential sequence makes reports reproducible without security semantics
-    state = 20260831
+    # Counter-addressed hashes produce reproducible draws without a global random state
     deltas: list[float] = []
-    for _ in range(samples):
+    for sample_index in range(samples):
         selected: list[tuple[float, float]] = []
-        for _ in pairs:
-            state = (1664525 * state + 1013904223) % (2**32)
-            selected.append(pairs[state % len(pairs)])
+        for draw_index in range(len(pairs)):
+            address = f"20260831:{sample_index}:{draw_index}".encode()
+            draw = int.from_bytes(hashlib.sha256(address).digest()[:8]) % len(pairs)
+            selected.append(pairs[draw])
         delta = sum(treatment - baseline for baseline, treatment in selected) / len(selected)
         deltas.append(delta)
     deltas.sort()

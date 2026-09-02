@@ -166,6 +166,17 @@ def test_positional_evaluators_limit_matches_to_relevant_regions() -> None:
     assert len(conclusion) == 1
 
 
+def test_paired_bootstrap_varies_and_remains_reproducible() -> None:
+    """Resample pairs with replacement without losing deterministic reports."""
+    pairs = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (0.0, 2.0)]
+
+    first = evaluation._bootstrap_delta_interval(pairs, samples=1000)
+    second = evaluation._bootstrap_delta_interval(pairs, samples=1000)
+
+    assert first == second
+    assert first[0] < first[1]
+
+
 def test_banned_vocabulary_evaluator_is_case_insensitive() -> None:
     """Count explicit catalog terms regardless of capitalization."""
     found = evaluation.evaluate_banned_vocabulary(
