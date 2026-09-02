@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Protocol
 
@@ -264,6 +265,30 @@ def test_report_scores_complete_cases_and_lists_pending_cases(tmp_path: Path) ->
     assert "## Source-item comparison" in report
     assert "zero-exposure-uninformative" in report
     assert "## Pending cases" in report
+
+
+def test_run_and_manifest_paths_reject_artifact_root_escape(
+    tmp_path: Path, monkeypatch: _MonkeyPatch
+) -> None:
+    """Reject traversal in CLI run IDs and manifest-derived response arms."""
+    monkeypatch.setattr(evaluation, "ARTIFACTS_DIR", tmp_path)
+    run_error = ""
+    try:
+        evaluation._resolve_run_dir("../../outside")
+    except ValueError as error:
+        run_error = str(error)
+
+    case = next(iter(evaluation.load_cases().values()))
+    manifest_item = asdict(case)
+    manifest_item["treatment_arm"] = "../../outside"
+    arm_error = ""
+    try:
+        evaluation._case_from_manifest_item(manifest_item)
+    except ValueError as error:
+        arm_error = str(error)
+
+    assert "run id" in run_error
+    assert "treatment arm" in arm_error
 
 
 def test_latest_run_ignores_non_experiment_artifact_directories(

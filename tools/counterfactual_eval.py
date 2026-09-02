@@ -155,6 +155,16 @@ def _validate_id(value: str, label: str) -> str:
     return value
 
 
+def _resolve_run_dir(run_id: str) -> Path:
+    """Resolve one validated run identifier beneath the artifact root."""
+    validated = _validate_id(run_id, "run id")
+    root = ARTIFACTS_DIR.resolve()
+    run_dir = (root / validated).resolve()
+    if not run_dir.is_relative_to(root):
+        raise ValueError(f"run id '{run_id}' escapes the artifact root")
+    return run_dir
+
+
 def load_config(path: Path = DEFAULT_CONFIG) -> ExperimentConfig:
     """Load and validate the experiment configuration."""
     with path.open("rb") as handle:
@@ -852,9 +862,22 @@ def build_jobs(
     return list(jobs.values())
 
 
+def _response_base_path(run_dir: Path, arm: str, prompt_id: str, seed: int) -> Path:
+    """Resolve one validated response path beneath its run response root."""
+    validated_arm = _validate_id(arm, "response arm")
+    validated_prompt = _validate_id(prompt_id, "prompt id")
+    if not isinstance(seed, int):
+        raise ValueError("response seed must be an integer")
+    root = (run_dir / "responses").resolve()
+    base = (root / validated_arm / validated_prompt / str(seed)).resolve()
+    if not base.is_relative_to(root):
+        raise ValueError("response path escapes the run response root")
+    return base
+
+
 def _artifact_paths(run_dir: Path, job: Job) -> tuple[Path, Path]:
     """Return the prose and metadata paths for one generation job."""
-    base = run_dir / "responses" / job.arm / job.prompt.id / str(job.seed)
+    base = _response_base_path(run_dir, job.arm, job.prompt.id, job.seed)
     return base.with_suffix(".txt"), base.with_suffix(".json")
 
 
@@ -915,6 +938,7 @@ def _run_job(run_dir: Path, config: ExperimentConfig, job: Job) -> str:
 def _case_from_manifest_item(item: dict[str, Any]) -> EvaluationCase:
     """Parse current and legacy manifest case records with semantic defaults."""
     data = dict(item)
+    data["id"] = _validate_id(_require_string(data.get("id"), "manifest case id"), "case id")
     kind = _require_string(data.get("kind"), "manifest case kind")
     mode_defaults = {
         "directive": "one-at-a-time",
@@ -931,9 +955,25 @@ def _case_from_manifest_item(item: dict[str, Any]) -> EvaluationCase:
         "treatment_hash",
         treatment_hash(treatment) if isinstance(treatment, str) else None,
     )
-    data["prompts"] = tuple(data["prompts"])
-    data["source_item_ids"] = tuple(data["source_item_ids"])
-    data["components"] = tuple(data.get("components", []))
+    data["prompts"] = tuple(
+        _validate_id(_require_string(item, "prompt id"), "prompt id") for item in data["prompts"]
+    )
+    data["source_item_ids"] = tuple(
+        _validate_id(_require_string(item, "source item id"), "source item id")
+        for item in data["source_item_ids"]
+    )
+    data["components"] = tuple(
+        _validate_id(_require_string(item, "component id"), "component id")
+        for item in data.get("components", [])
+    )
+    if data.get("parent") is not None:
+        parent = _require_string(data["parent"], "parent id")
+        data["parent"] = _validate_id(parent, "parent id")
+    if data.get("treatment_arm") is not None:
+        treatment_arm = _require_string(data["treatment_arm"], "treatment arm")
+        data["treatment_arm"] = _validate_id(treatment_arm, "treatment arm")
+    control_arm = _require_string(data["control_arm"], "control arm")
+    data["control_arm"] = _validate_id(control_arm, "control arm")
     return EvaluationCase(**data)
 
 
@@ -1063,7 +1103,7 @@ def word_count(text: str) -> int:
 
 def _read_response(run_dir: Path, arm: str, prompt_id: str, seed: int) -> str:
     """Read one cached response or raise a clear incomplete-run error."""
-    path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
+    path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
     if not path.is_file():
         raise FileNotFoundError(f"missing response: {path.relative_to(REPO)}")
     return path.read_text()
@@ -1225,7 +1265,7 @@ def _missing_case_responses(
     for prompt_id in case.prompts:
         for seed in seeds:
             for arm in (case.control_arm, _case_treatment_arm(case)):
-                path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
+                path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
                 if not path.is_file():
                     missing.append(f"{arm}/{prompt_id}/{seed}")
     return missing
@@ -1401,7 +1441,7 @@ def build_evaluator_calibration(
     calibration: dict[str, dict[str, Any]] = {}
     nonmatches: dict[str, list[dict[str, Any]]] = {}
     for (evaluator_name, arm, prompt_id, seed), case_ids in sorted(requests.items()):
-        path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
+        path = _response_base_path(run_dir, arm, prompt_id, seed).with_suffix(".txt")
         if not path.is_file():
             continue
         text = path.read_text()
@@ -1526,7 +1566,15 @@ def _load_manifest_run(
 ) -> tuple[dict[str, PromptSpec], dict[str, EvaluationCase], tuple[int, ...]]:
     """Reconstruct report inputs from an immutable run manifest."""
     raw = json.loads((run_dir / "manifest.json").read_text())
-    prompts = {item["id"]: PromptSpec(**item) for item in raw["prompts"]}
+    prompts = {
+        _validate_id(_require_string(item.get("id"), "prompt id"), "prompt id"): PromptSpec(
+            id=_validate_id(_require_string(item.get("id"), "prompt id"), "prompt id"),
+            category=_require_string(item.get("category"), "prompt category"),
+            text=_require_string(item.get("text"), "prompt text"),
+        )
+        for item in raw["prompts"]
+        if isinstance(item, dict)
+    }
     cases = {
         item["id"]: _case_from_manifest_item(item)
         for item in raw["cases"]
@@ -1574,7 +1622,7 @@ def main() -> None:
 
     try:
         if args.command in {"report", "calibrate"}:
-            run_dir = ARTIFACTS_DIR / args.run_id if args.run_id else _latest_run()
+            run_dir = _resolve_run_dir(args.run_id) if args.run_id else _latest_run()
             prompts, cases, seeds = _load_manifest_run(run_dir)
             if args.command == "report":
                 report = write_report(run_dir, prompts, cases, seeds)
