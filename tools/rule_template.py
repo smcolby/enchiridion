@@ -509,8 +509,7 @@ def render_rule_treatment(
         for line_number, line in enumerate(lines[body_start:], start=body_start + 1)
         if line_number not in removed_lines
     ]
-    rendered = "\n".join(rendered_lines).strip()
-    return re.sub(r"\n{3,}", "\n\n", rendered)
+    return "\n".join(rendered_lines).strip()
 
 
 def validate_inventory(inventory: tuple[ArtifactInventory, ...]) -> list[str]:

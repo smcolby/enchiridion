@@ -476,11 +476,16 @@ def instruction_for_case(
     raise ValueError(f"unsupported case kind '{case.kind}'")
 
 
+def _mask_match(match: re.Match[str]) -> str:
+    """Mask one exempt region while preserving offsets and line boundaries."""
+    return "".join("\n" if character == "\n" else " " for character in match.group())
+
+
 def _visible_prose(text: str) -> str:
-    """Remove Markdown code and comment regions that prose directives exempt."""
-    without_fences = FENCED_CODE_RE.sub(" ", text)
-    without_inline_code = INLINE_CODE_RE.sub(" ", without_fences)
-    return HTML_COMMENT_RE.sub(" ", without_inline_code)
+    """Mask Markdown code and comment regions that prose directives exempt."""
+    without_fences = FENCED_CODE_RE.sub(_mask_match, text)
+    without_inline_code = INLINE_CODE_RE.sub(_mask_match, without_fences)
+    return HTML_COMMENT_RE.sub(_mask_match, without_inline_code)
 
 
 def _matches(text: str, pattern: re.Pattern[str]) -> list[Occurrence]:
@@ -545,18 +550,26 @@ def evaluate_dash_interruption(text: str) -> list[Occurrence]:
 
 def evaluate_filler_opening_strict(text: str) -> list[Occurrence]:
     """Find only filler openings explicitly named by the canonical directive."""
-    opening = _visible_prose(text).lstrip()[:400]
+    prose = _visible_prose(text)
+    offset = len(prose) - len(prose.lstrip())
+    opening = prose[offset : offset + 400]
     pattern = re.compile(
         r"\b(?:sure,?[ \t]+here[ \t]+is|it(?:[’']s|[ \t]+is)[ \t]+worth[ \t]+"
         r"noting[ \t]+that|in[ \t]+today(?:[’']s)[ \t]+world)\b",
         re.IGNORECASE,
     )
-    return _matches(opening, pattern)
+    found = _matches(opening, pattern)
+    return [
+        Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
+        for item in found
+    ]
 
 
 def evaluate_filler_opening(text: str) -> list[Occurrence]:
     """Find known filler phrases near the beginning of a response."""
-    opening = _visible_prose(text).lstrip()[:400]
+    prose = _visible_prose(text)
+    offset = len(prose) - len(prose.lstrip())
+    opening = prose[offset : offset + 400]
     pattern = re.compile(
         r"\b(?:"
         r"(?:sure|certainly|absolutely|of\s+course)[,!]?[ \t]+"
@@ -573,7 +586,11 @@ def evaluate_filler_opening(text: str) -> list[Occurrence]:
         r")",
         re.IGNORECASE,
     )
-    return _matches(opening, pattern)
+    found = _matches(opening, pattern)
+    return [
+        Occurrence(start=item.start + offset, end=item.end + offset, snippet=item.snippet)
+        for item in found
+    ]
 
 
 def evaluate_concluding_summary_strict(text: str) -> list[Occurrence]:

@@ -390,6 +390,17 @@ def test_strict_views_preserve_canonical_surface_form_boundaries() -> None:
     assert len(evaluation.evaluate_banned_vocabulary(vocabulary)) == 3
 
 
+def test_evaluator_offsets_locate_original_response_text() -> None:
+    """Keep occurrence spans aligned after masking code and leading whitespace."""
+    text = "```text\nignored -- code\n```\n  Sure, here is the report."
+
+    found = evaluation.evaluate_filler_opening(text)
+
+    assert len(found) == 1
+    assert found[0].start == text.index("Sure")
+    assert text[found[0].start : found[0].end] == "Sure, here is"
+
+
 def test_dash_evaluator_excludes_code_and_markdown_structural_hyphens() -> None:
     """Count prose dashes without counting code, options, comments, or separators."""
     text = (
