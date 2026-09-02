@@ -1368,6 +1368,90 @@ def write_report(
     return report_path
 
 
+def build_evaluator_calibration(
+    run_dir: Path,
+    cases: dict[str, EvaluationCase],
+    seeds: tuple[int, ...],
+    nonmatch_sample: int = 10,
+) -> dict[str, dict[str, Any]]:
+    """Collect all real matches and deterministic nonmatch samples by evaluator."""
+    requests: dict[tuple[str, str, str, int], set[str]] = {}
+    for case in cases.values():
+        for arm in {case.control_arm, _case_treatment_arm(case)}:
+            for prompt_id in case.prompts:
+                for seed in seeds:
+                    key = (case.evaluator, arm, prompt_id, seed)
+                    requests.setdefault(key, set()).add(case.id)
+
+    calibration: dict[str, dict[str, Any]] = {}
+    nonmatches: dict[str, list[dict[str, Any]]] = {}
+    for (evaluator_name, arm, prompt_id, seed), case_ids in sorted(requests.items()):
+        path = run_dir / "responses" / arm / prompt_id / f"{seed}.txt"
+        if not path.is_file():
+            continue
+        text = path.read_text()
+        matches = EVALUATORS[evaluator_name](text)
+        strict_evaluator = STRICT_EVALUATORS.get(evaluator_name)
+        strict_matches = strict_evaluator(text) if strict_evaluator else matches
+        record = {
+            "arm": arm,
+            "prompt": prompt_id,
+            "seed": seed,
+            "case_ids": sorted(case_ids),
+            "response_path": str(path.relative_to(run_dir)),
+            "expanded_occurrences": len(matches),
+            "strict_occurrences": len(strict_matches),
+            "snippets": [asdict(match) for match in matches],
+        }
+        evaluator_data = calibration.setdefault(
+            evaluator_name,
+            {"matched_responses": [], "sampled_nonmatches": []},
+        )
+        if matches:
+            evaluator_data["matched_responses"].append(record)
+        else:
+            nonmatches.setdefault(evaluator_name, []).append(record)
+
+    for evaluator_name, candidates in nonmatches.items():
+        ordered = sorted(
+            candidates,
+            key=lambda item: _stable_hash([item["arm"], item["prompt"], item["seed"]]),
+        )
+        calibration.setdefault(
+            evaluator_name,
+            {"matched_responses": [], "sampled_nonmatches": []},
+        )["sampled_nonmatches"] = ordered[:nonmatch_sample]
+    return calibration
+
+
+def write_evaluator_calibration(
+    run_dir: Path,
+    cases: dict[str, EvaluationCase],
+    seeds: tuple[int, ...],
+    nonmatch_sample: int = 10,
+) -> tuple[Path, Path]:
+    """Write JSON and Markdown packets for manual evaluator calibration."""
+    calibration = build_evaluator_calibration(run_dir, cases, seeds, nonmatch_sample)
+    json_path = run_dir / "calibration.json"
+    markdown_path = run_dir / "calibration.md"
+    _atomic_write(json_path, json.dumps(calibration, indent=2, sort_keys=True) + "\n")
+    lines = [
+        "# Evaluator calibration packet",
+        "",
+        "Review every matched response and each sampled nonmatch at its recorded path.",
+        "",
+        "| Evaluator | Matched responses | Sampled nonmatches |",
+        "|---|---:|---:|",
+    ]
+    for evaluator_name, data in sorted(calibration.items()):
+        lines.append(
+            f"| {evaluator_name} | {len(data['matched_responses'])} | "
+            f"{len(data['sampled_nonmatches'])} |"
+        )
+    _atomic_write(markdown_path, "\n".join(lines) + "\n")
+    return json_path, markdown_path
+
+
 def _selected_seeds(config: ExperimentConfig, count: int | None) -> tuple[int, ...]:
     """Select the first configured seeds for a screening or confirmation run."""
     if count is None:
@@ -1460,14 +1544,34 @@ def main() -> None:
 
     report_parser = subparsers.add_parser("report", help="score a completed artifact run")
     report_parser.add_argument("--run-id", help="artifact run id; defaults to latest")
+
+    calibrate_parser = subparsers.add_parser(
+        "calibrate", help="prepare real matches and sampled nonmatches for review"
+    )
+    calibrate_parser.add_argument("--run-id", help="artifact run id; defaults to latest")
+    calibrate_parser.add_argument(
+        "--nonmatches",
+        type=int,
+        default=10,
+        help="sample this many unmatched responses per evaluator",
+    )
     args = parser.parse_args()
 
     try:
-        if args.command == "report":
+        if args.command in {"report", "calibrate"}:
             run_dir = ARTIFACTS_DIR / args.run_id if args.run_id else _latest_run()
             prompts, cases, seeds = _load_manifest_run(run_dir)
-            report = write_report(run_dir, prompts, cases, seeds)
-            print(f"Wrote {report.relative_to(REPO)}")
+            if args.command == "report":
+                report = write_report(run_dir, prompts, cases, seeds)
+                print(f"Wrote {report.relative_to(REPO)}")
+                return
+            if args.nonmatches < 1:
+                raise ValueError("nonmatches must be positive")
+            json_path, markdown_path = write_evaluator_calibration(
+                run_dir, cases, seeds, args.nonmatches
+            )
+            print(f"Wrote {json_path.relative_to(REPO)}")
+            print(f"Wrote {markdown_path.relative_to(REPO)}")
             return
 
         config = load_config()

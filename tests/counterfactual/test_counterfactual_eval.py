@@ -148,6 +148,34 @@ def test_leave_one_out_scoring_uses_full_rule_as_control(tmp_path: Path) -> None
     assert score["strict_view"]["treatment_occurrences"] == len(case.prompts)
 
 
+def test_calibration_collects_matches_and_deterministic_nonmatches(tmp_path: Path) -> None:
+    """Prepare reproducible real-response samples for evaluator boundary review."""
+    cases = evaluation.load_cases()
+    case = cases[ANTITHESIS_ID]
+    seed = 101
+    for prompt_id in case.prompts:
+        responses = {
+            "baseline": "The mechanism has one direct explanation.",
+            case.id: "It's not a small change, it's a redesign.",
+        }
+        for arm, response in responses.items():
+            path = tmp_path / "responses" / arm / prompt_id / f"{seed}.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(response)
+
+    first = evaluation.build_evaluator_calibration(
+        tmp_path, {case.id: case}, (seed,), nonmatch_sample=2
+    )
+    second = evaluation.build_evaluator_calibration(
+        tmp_path, {case.id: case}, (seed,), nonmatch_sample=2
+    )
+
+    antithesis = first["antithesis-pivot"]
+    assert first == second
+    assert len(antithesis["matched_responses"]) == len(case.prompts)
+    assert len(antithesis["sampled_nonmatches"]) == 2
+
+
 def test_manifest_merges_case_selections_without_overwriting(tmp_path: Path) -> None:
     """Preserve compatible case inventories when several selections share a run."""
     config = evaluation.load_config()

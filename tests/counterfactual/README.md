@@ -78,6 +78,13 @@ Regenerate a report from the latest completed run:
 python tools/counterfactual_eval.py report
 ```
 
+Prepare every real evaluator match plus a deterministic sample of unmatched
+responses for manual boundary review:
+
+```bash
+python tools/counterfactual_eval.py calibrate --run-id <run-id> --nonmatches 10
+```
+
 Raw prose, request metadata, scores, and reports live under
 `.counterfactual-artifacts/`. The directory is ignored by git. Cache identity
 includes the Ollama version, model digest, generation settings, prompts, and seed
