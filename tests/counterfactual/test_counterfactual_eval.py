@@ -4,16 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Protocol
 
-TOOLS = Path(__file__).parents[2] / "tools"
-sys.path.insert(0, str(TOOLS))
-
-import counterfactual_eval as evaluation  # noqa: E402
-import rule_template as template  # noqa: E402
+from enchiridion import counterfactual as evaluation
+from enchiridion import rule_template as template
 
 
 class _MonkeyPatch(Protocol):
