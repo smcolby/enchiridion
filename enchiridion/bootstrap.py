@@ -19,8 +19,15 @@ from pathlib import Path
 
 from . import registry
 from .diagnostics import Status
-from .live import reconcile_generated, reconcile_symlink
-from .registry import REPO, expand, render_template
+from .live import (
+    HarnessWiring,
+    collect_harness_wiring,
+    reconcile_generated,
+    reconcile_symlink,
+)
+from .registry import REPO, render_template
+
+WIRING = collect_harness_wiring(registry.harnesses(), REPO, registry.expand)
 
 # ── primitives ────────────────────────────────────────────────────────────────
 
@@ -45,24 +52,19 @@ def generate(src: Path, dst: Path) -> None:
     print(f"  {action:<4} {dst}")
 
 
-def harness_installed(conf: dict) -> bool:
-    """Return True if the harness's root directory exists on this machine."""
-    return expand(conf["root"]).is_dir()
-
-
 # ── wiring ────────────────────────────────────────────────────────────────────
 
 
-def wire_harness(name: str, conf: dict) -> None:
-    """Wire one harness's symlinks and generated files into place."""
-    if not harness_installed(conf):
-        print(f"  SKIP {name} — {expand(conf['root'])} not found")
+def wire_harness(wiring: HarnessWiring) -> None:
+    """Wire one harness's declared symlinks and generated files."""
+    if not wiring.is_installed:
+        print(f"  SKIP {wiring.name}: {wiring.root} not found")
         return
-    print(f"Wiring {name}...")
-    for pair in conf.get("symlinks", []):
-        link(REPO / pair[0], expand(pair[1]))
-    for pair in conf.get("generated", []):
-        generate(REPO / pair[0], expand(pair[1]))
+    print(f"Wiring {wiring.name}...")
+    for source, target in wiring.symlinks:
+        link(source, target)
+    for source, target in wiring.generated:
+        generate(source, target)
 
 
 def skill_source(skill: str) -> Path | None:
@@ -79,26 +81,26 @@ def wire_skill(skill: str) -> None:
     if src is None:
         print(f"  WARN skill '{skill}' not found in shared/skills/ — skipping")
         return
-    for conf in registry.harnesses().values():
-        if "skill_dir" not in conf or not harness_installed(conf):
+    for wiring in WIRING.values():
+        if wiring.skill_dir is None or not wiring.is_installed:
             continue
-        link(src, expand(conf["skill_dir"]) / skill)
+        link(src, wiring.skill_dir / skill)
     print(f"  skill '{skill}' wired")
 
 
 def wire_only(target: str) -> None:
     """Re-wire the single registry entry whose live path matches target."""
-    t = Path(target).expanduser().absolute()
-    for conf in registry.harnesses().values():
-        for pair in conf.get("symlinks", []):
-            if expand(pair[1]) == t:
-                link(REPO / pair[0], t)
+    selected = Path(target).expanduser().absolute()
+    for wiring in WIRING.values():
+        for source, live_path in wiring.symlinks:
+            if live_path == selected:
+                link(source, selected)
                 return
-        for pair in conf.get("generated", []):
-            if expand(pair[1]) == t:
-                generate(REPO / pair[0], t)
+        for source, live_path in wiring.generated:
+            if live_path == selected:
+                generate(source, selected)
                 return
-    sys.exit(f"No registry entry has live path {t}")
+    sys.exit(f"No registry entry has live path {selected}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -121,8 +123,8 @@ def main() -> None:
     print("=== enchiridion bootstrap ===")
     print(f"Repo: {REPO}\n")
 
-    for name, conf in registry.harnesses().items():
-        wire_harness(name, conf)
+    for wiring in WIRING.values():
+        wire_harness(wiring)
         print()
 
     for skill in registry.skills():
@@ -138,7 +140,7 @@ def main() -> None:
             " so 'ollama launch claude' routes to loki.local"
         )
     print()
-    print("Run 'python tools/verify.py' to confirm congruence.")
+    print("Run 'enchiridion verify' to confirm congruence.")
 
 
 if __name__ == "__main__":

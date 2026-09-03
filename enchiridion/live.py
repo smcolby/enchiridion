@@ -1,11 +1,72 @@
 """Inspect and reconcile machine-local enchiridion wiring."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .diagnostics import Diagnostic, Status
 
 TemplateRenderer = Callable[[Path], str]
+PathExpander = Callable[[str], Path]
+
+
+@dataclass(frozen=True)
+class HarnessWiring:
+    """Declare repository and live paths for one installed harness."""
+
+    name: str
+    root: Path
+    instruction_repo: Path
+    instruction_live: Path
+    skill_dir: Path | None
+    symlinks: tuple[tuple[Path, Path], ...]
+    generated: tuple[tuple[Path, Path], ...]
+
+    @property
+    def is_installed(self) -> bool:
+        """Return whether the harness root exists on this machine."""
+        return self.root.is_dir()
+
+
+def _path_pairs(raw: object, repo: Path, expand: PathExpander) -> tuple[tuple[Path, Path], ...]:
+    """Parse registry source and destination pairs into concrete paths."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("harness path pairs must be a list")
+    pairs: list[tuple[Path, Path]] = []
+    for item in raw:
+        if (
+            not isinstance(item, list)
+            or len(item) != 2
+            or not all(isinstance(value, str) for value in item)
+        ):
+            raise ValueError("each harness path pair must contain two strings")
+        pairs.append((repo / item[0], expand(item[1])))
+    return tuple(pairs)
+
+
+def collect_harness_wiring(
+    configs: Mapping[str, Mapping[str, Any]],
+    repo: Path,
+    expand: PathExpander,
+) -> dict[str, HarnessWiring]:
+    """Build concrete live wiring plans from parsed harness registry data."""
+    wiring: dict[str, HarnessWiring] = {}
+    for name, config in configs.items():
+        skill_value = config.get("skill_dir")
+        skill_dir = expand(skill_value) if isinstance(skill_value, str) else None
+        wiring[name] = HarnessWiring(
+            name=name,
+            root=expand(str(config["root"])),
+            instruction_repo=repo / str(config["instruction_file"]),
+            instruction_live=expand(str(config["instruction_live"])),
+            skill_dir=skill_dir,
+            symlinks=_path_pairs(config.get("symlinks"), repo, expand),
+            generated=_path_pairs(config.get("generated"), repo, expand),
+        )
+    return wiring
 
 
 def inspect_symlink(source: Path, target: Path) -> Diagnostic:

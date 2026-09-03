@@ -22,7 +22,7 @@ from rich.table import Table
 
 from . import registry, sync
 from .diagnostics import Status
-from .live import inspect_generated, inspect_symlink
+from .live import collect_harness_wiring, inspect_generated, inspect_symlink
 
 REPO = registry.REPO
 HOME = registry.HOME
@@ -31,22 +31,11 @@ AGENTS_DIR = REPO / "shared/agents"
 MODELS_DIR = REPO / "shared/models"
 HARNESSES_DIR = REPO / "harnesses"
 
-# Per-harness wiring topology, built from tools/harnesses.toml (see registry.py)
-HARNESS_WIRING: dict[str, dict] = {
-    h: {
-        "instruction_repo": REPO / conf["instruction_file"],
-        "instruction_live": registry.expand(conf["instruction_live"]),
-        "skill_dir": registry.expand(conf["skill_dir"]) if "skill_dir" in conf else None,
-        "symlinks": [(REPO / s, registry.expand(d)) for s, d in conf.get("symlinks", [])],
-        "generated": [(REPO / s, registry.expand(d)) for s, d in conf.get("generated", [])],
-    }
-    for h, conf in registry.harnesses().items()
-}
-
-HARNESS_FILES = {h: w["instruction_repo"] for h, w in HARNESS_WIRING.items()}
-HARNESS_LIVE_INSTR = {h: w["instruction_live"] for h, w in HARNESS_WIRING.items()}
-SYMLINK_MAP = {h: w["symlinks"] for h, w in HARNESS_WIRING.items()}
-GENERATED_MAP = {h: w["generated"] for h, w in HARNESS_WIRING.items()}
+# Live topology shares bootstrap's concrete registry calculation
+HARNESS_WIRING = collect_harness_wiring(registry.harnesses(), REPO, registry.expand)
+HARNESS_FILES = {name: wiring.instruction_repo for name, wiring in HARNESS_WIRING.items()}
+SYMLINK_MAP = {name: wiring.symlinks for name, wiring in HARNESS_WIRING.items()}
+GENERATED_MAP = {name: wiring.generated for name, wiring in HARNESS_WIRING.items()}
 
 console = Console()
 
@@ -243,7 +232,11 @@ def inspect_skills(errors: list, warnings: list):
     _section("SKILLS")
     skills: dict[str, dict[str, Path]] = {}
 
-    skill_dirs = {h: w["skill_dir"] for h, w in HARNESS_WIRING.items() if w["skill_dir"]}
+    skill_dirs = {
+        name: wiring.skill_dir
+        for name, wiring in HARNESS_WIRING.items()
+        if wiring.skill_dir is not None
+    }
     for harness, skill_dir in skill_dirs.items():
         if skill_dir.exists():
             for item in sorted(skill_dir.iterdir()):

@@ -4,11 +4,42 @@ from pathlib import Path
 
 from enchiridion.diagnostics import Status
 from enchiridion.live import (
+    collect_harness_wiring,
     inspect_generated,
     inspect_symlink,
     reconcile_generated,
     reconcile_symlink,
 )
+
+
+def test_collect_harness_wiring_resolves_registry_paths(tmp_path: Path) -> None:
+    # Arrange one parsed registry entry and an isolated live root
+    home = tmp_path / "home"
+    configs = {
+        "test": {
+            "root": "~/test",
+            "instruction_file": "harnesses/test/AGENTS.md",
+            "instruction_live": "~/test/AGENTS.md",
+            "skill_dir": "~/test/skills",
+            "symlinks": [["harnesses/test/AGENTS.md", "~/test/AGENTS.md"]],
+            "generated": [["harnesses/test/settings.json", "~/test/settings.json"]],
+        }
+    }
+
+    def expand(value: str) -> Path:
+        return home / value.removeprefix("~/")
+
+    # Resolve every repository and live path once
+    wiring = collect_harness_wiring(configs, tmp_path, expand)["test"]
+
+    # Bootstrap and doctor receive the same concrete topology
+    assert wiring.root == home / "test"
+    assert wiring.instruction_repo == tmp_path / "harnesses/test/AGENTS.md"
+    assert wiring.skill_dir == home / "test/skills"
+    assert wiring.symlinks == ((tmp_path / "harnesses/test/AGENTS.md", home / "test/AGENTS.md"),)
+    assert wiring.generated == (
+        (tmp_path / "harnesses/test/settings.json", home / "test/settings.json"),
+    )
 
 
 def test_inspect_symlink_reports_matching_target(tmp_path: Path) -> None:
