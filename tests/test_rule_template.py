@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
-TOOLS = Path(__file__).parents[1] / "tools"
-sys.path.insert(0, str(TOOLS))
-
-import rule_template as template  # noqa: E402
+from enchiridion import rule_template as template
 
 
 def test_all_canonical_artifacts_map_without_structural_errors() -> None:

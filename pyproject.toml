@@ -1,5 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "enchiridion"
+version = "0.1.0"
+description = "Cross-harness AI coding-assistant configuration manager"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.scripts]
+enchiridion = "enchiridion.cli:main"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6",
+    "pyright>=1.1.410",
+    "pytest>=8.0",
+    "ruff>=0.15.14",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["enchiridion"]
+
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
@@ -20,7 +49,6 @@ convention = "numpy"
 "shared/rules/**/examples/test_*.py" = ["S101", "D"]
 
 [tool.pyright]
-pythonVersion = "3.12"
+pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["tools"]
-extraPaths = ["tools"]
+include = ["enchiridion", "tools"]
