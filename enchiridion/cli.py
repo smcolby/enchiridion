@@ -78,7 +78,7 @@ def _dispatch_harness(arguments: list[str]) -> int:
         return 0
     operation, *remaining = arguments
     if operation == "remove" and len(remaining) == 1:
-        return _invoke("enchiridion.bootstrap", ["--remove", remaining[0]])
+        return _invoke("enchiridion.harness", ["remove", remaining[0]])
     if operation == "remove":
         print("enchiridion harness remove: expected one harness name", file=sys.stderr)
         return 2

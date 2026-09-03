@@ -9,17 +9,17 @@ only when their rendered content changes.
 Usage:
   python tools/bootstrap.py                   # wire everything
   python tools/bootstrap.py --only PATH       # re-wire a single live file
-  python tools/bootstrap.py --skill NAME      # wire one skill into all harnesses
-  python tools/bootstrap.py --remove HARNESS  # unlink a harness and archive it
+  enchiridion bootstrap --skill NAME      # wire one skill into all harnesses
 """
 
 import argparse
 import os
-import shutil
 import sys
 from pathlib import Path
 
 from . import registry
+from .diagnostics import Status
+from .live import reconcile_generated, reconcile_symlink
 from .registry import REPO, expand, render_template
 
 # ── primitives ────────────────────────────────────────────────────────────────
@@ -27,37 +27,22 @@ from .registry import REPO, expand, render_template
 
 def link(src: Path, dst: Path) -> None:
     """Create or repair a symlink dst -> src, idempotently."""
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.is_symlink() and dst.readlink() == src:
-        print(f"  ok   {dst}")
+    result, changed = reconcile_symlink(src, dst)
+    if result.status is Status.ERROR:
+        print(f"  ERROR {dst}: {result.summary}; resolve manually")
         return
-    if dst.is_symlink() or dst.is_file():
-        dst.unlink()
-    elif dst.is_dir():
-        print(f"  ERROR {dst} is a real directory — refusing to replace; resolve manually")
-        return
-    dst.symlink_to(src)
-    print(f"  link {dst} → {src}")
+    action = "link" if changed else "ok"
+    print(f"  {action:<4} {dst} → {src}")
 
 
 def generate(src: Path, dst: Path) -> None:
     """Render a template to dst, writing only if the content changed."""
-    content = render_template(src)
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.is_symlink():
-        dst.unlink()
-    if dst.is_file() and dst.read_text() == content:
-        print(f"  ok   {dst}")
+    result, changed = reconcile_generated(src, dst, render_template)
+    if result.status is Status.ERROR:
+        print(f"  ERROR {dst}: {result.summary}; resolve manually")
         return
-    dst.write_text(content)
-    print(f"  gen  {dst}")
-
-
-def unlink_if_symlink(dst: Path) -> None:
-    """Remove dst if it is a symlink, leaving real files untouched."""
-    if dst.is_symlink():
-        dst.unlink()
-        print(f"  unlink {dst}")
+    action = "gen" if changed else "ok"
+    print(f"  {action:<4} {dst}")
 
 
 def harness_installed(conf: dict) -> bool:
@@ -116,32 +101,6 @@ def wire_only(target: str) -> None:
     sys.exit(f"No registry entry has live path {t}")
 
 
-# ── removal ───────────────────────────────────────────────────────────────────
-
-
-def remove_harness(name: str) -> None:
-    """Unlink a harness's wiring and archive its repo directory."""
-    conf = registry.harnesses().get(name)
-    if conf is None:
-        sys.exit(f"Unknown harness: {name}")
-    print(f"Removing harness: {name}")
-    for pair in conf.get("symlinks", []):
-        unlink_if_symlink(expand(pair[1]))
-    for pair in conf.get("generated", []):
-        dst = expand(pair[1])
-        if dst.is_file() and not dst.is_symlink():
-            dst.unlink()
-            print(f"  rm     {dst}")
-    if "skill_dir" in conf:
-        for skill in registry.skills():
-            unlink_if_symlink(expand(conf["skill_dir"]) / skill)
-    archive_dir = REPO / "harnesses/_deprecated"
-    archive_dir.mkdir(exist_ok=True)
-    shutil.move(str(REPO / "harnesses" / name), str(archive_dir / name))
-    print(f"  archived harnesses/{name} → harnesses/_deprecated/{name}")
-    print(f"  Done. Delete '{name}' from tools/harnesses.toml then run verify.py.")
-
-
 # ── main ──────────────────────────────────────────────────────────────────────
 
 
@@ -150,12 +109,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", metavar="PATH", help="re-wire a single live file")
     parser.add_argument("--skill", metavar="NAME", help="wire one skill into all harnesses")
-    parser.add_argument("--remove", metavar="HARNESS", help="unlink a harness and archive it")
     args = parser.parse_args()
 
-    if args.remove:
-        remove_harness(args.remove)
-        return
     if args.skill:
         wire_skill(args.skill)
         return

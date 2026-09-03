@@ -16,7 +16,10 @@ import re
 import sys
 from pathlib import Path
 
-from . import registry
+from . import registry, render_rules
+from .diagnostics import Diagnostic, Status
+from .frontmatter import FRONTMATTER_RE, load_frontmatter
+from .repository import FilePlan, inspect_file, reconcile_file
 
 REPO = registry.REPO
 BLOCKS_DIR = REPO / "shared/blocks"
@@ -46,7 +49,15 @@ FENCE_RE = re.compile(
     re.DOTALL,
 )
 
-FM_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+FM_RE = FRONTMATTER_RE
+
+
+def _display_path(path: Path, root: Path = REPO) -> str:
+    """Return a root-relative path when possible, otherwise an absolute path."""
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 def load_block(name: str) -> str:
@@ -58,52 +69,88 @@ def load_block(name: str) -> str:
     return path.read_text().rstrip("\n") + "\n"
 
 
-def check_blocks(apply: bool, harness_filter: str | None = None) -> int:
-    """Check, or with apply rewrite, fenced block regions. Return the drift count."""
-    drift = 0
-    for harness, fpath in HARNESS_INSTRUCTION_FILES.items():
+def plan_blocks(harness_filter: str | None = None) -> list[FilePlan]:
+    """Calculate exact harness instruction files and block diagnostics."""
+    plans: list[FilePlan] = []
+    for harness, path in HARNESS_INSTRUCTION_FILES.items():
         if harness_filter and harness != harness_filter:
             continue
-        if not fpath.exists():
+        remediation = f"enchiridion sync --harness {harness} --apply"
+        if not path.is_file():
+            diagnostic = Diagnostic(
+                "blocks",
+                path,
+                Status.ERROR,
+                f"{harness}: instruction file missing",
+                remediation=remediation,
+            )
+            plans.append(FilePlan(path, None, (diagnostic,)))
             continue
-        text = fpath.read_text()
-        new_text = text
-        for m in FENCE_RE.finditer(text):
-            name = m.group("name")
+
+        # Render every existing fence from its canonical shared block
+        actual = path.read_text()
+        expected = actual
+        drifted: list[str] = []
+        for match in FENCE_RE.finditer(actual):
+            name = match.group("name")
             canonical = load_block(name)
-            actual = m.group("content")
-            if actual != canonical:
-                drift += 1
-                print(f"  DRIFT  {harness}: block '{name}'")
-                if apply:
-                    new_text = new_text.replace(
-                        m.group(0),
-                        f"<!-- block: {name} -->\n{canonical}<!-- /block: {name} -->",
-                    )
-        if apply and new_text != text:
-            fpath.write_text(new_text)
-            print(f"  FIXED  {harness}: {fpath.name}")
-    return drift
+            if match.group("content") == canonical:
+                continue
+            drifted.append(name)
+            expected = expected.replace(
+                match.group(0),
+                f"<!-- block: {name} -->\n{canonical}<!-- /block: {name} -->",
+            )
+
+        if drifted:
+            diagnostics = tuple(
+                Diagnostic(
+                    "blocks",
+                    path,
+                    Status.ERROR,
+                    f"{harness}: block '{name}' differs from shared",
+                    expected=expected,
+                    actual=actual,
+                    remediation=remediation,
+                )
+                for name in drifted
+            )
+        else:
+            diagnostics = (
+                Diagnostic(
+                    "blocks",
+                    path,
+                    Status.OK,
+                    f"{harness}: all block fences match shared",
+                    expected=expected,
+                    actual=actual,
+                ),
+            )
+        plans.append(FilePlan(path, expected, diagnostics))
+    return plans
 
 
-def load_frontmatter(raw: str) -> tuple[dict | None, str | None]:
-    """Parse a frontmatter YAML block. Returns (data, None) or (None, message).
-
-    The common authoring mistake is an unquoted value containing a colon
-    followed by a space, which YAML reads as a nested mapping; the message
-    names that cause so the fix is obvious without decoding a raw scanner error.
-    """
-    import yaml
-
-    try:
-        return yaml.safe_load(raw), None
-    except yaml.YAMLError as e:
-        detail = str(e).replace("\n", " ")
-        hint = (
-            " (a value containing a colon followed by a space must be quoted,"
-            ' e.g. description: "foo: bar")'
+def check_blocks(apply: bool, harness_filter: str | None = None) -> int:
+    """Check, or with apply rewrite, fenced block regions. Return the drift count."""
+    plans = plan_blocks(harness_filter)
+    drift = sum(
+        diagnostic.status is Status.ERROR for plan in plans for diagnostic in plan.diagnostics
+    )
+    for plan in plans:
+        errors = [item for item in plan.diagnostics if item.status is Status.ERROR]
+        for diagnostic in errors:
+            print(f"  DRIFT  {diagnostic.summary}")
+        if not apply or not errors or plan.expected is None:
+            continue
+        result, changed = reconcile_file(
+            "blocks",
+            plan.target,
+            plan.expected,
+            errors[0].remediation or "enchiridion sync --apply",
         )
-        return None, f"invalid YAML frontmatter: {detail}{hint}"
+        if changed and result.status is Status.OK:
+            print(f"  FIXED  {_display_path(plan.target)}")
+    return drift
 
 
 def lint_description(rel, desc: str) -> list[str]:
@@ -193,52 +240,74 @@ def parse_shared_agent(path: Path):
     return fm, body
 
 
-def check_agents(apply: bool, harness_filter: str | None = None) -> int:
-    """Render, or check, per-harness agent files from shared bodies. Return the drift count."""
-    agent_configs = registry.agent_configs()
+def _render_agent(frontmatter: dict, body: str, harness_config: dict) -> str:
+    """Render one canonical agent for a harness-specific frontmatter schema."""
+    import yaml
 
-    drift = 0
-    for slug in sorted(AGENTS_DIR.glob("*.md")):
-        fm, canonical_body = parse_shared_agent(slug)
-        name = slug.stem
+    fields = harness_config.get("include_fields", ["description"])
+    rendered_frontmatter: dict = {}
+    for field in fields:
+        if field in ("model", "tools"):
+            rendered_frontmatter[field] = harness_config[field]
+        else:
+            rendered_frontmatter[field] = frontmatter[field]
+    fm_yaml = yaml.safe_dump(
+        rendered_frontmatter,
+        sort_keys=False,
+        default_flow_style=False,
+        width=10**9,
+    ).rstrip("\n")
+    return f"---\n{fm_yaml}\n---\n\n{body}"
 
-        for harness, hconf in agent_configs.items():
+
+def plan_agents(harness_filter: str | None = None) -> list[FilePlan]:
+    """Calculate every rendered agent file and its exact repository state."""
+    plans: list[FilePlan] = []
+    for source in sorted(AGENTS_DIR.glob("*.md")):
+        frontmatter, body = parse_shared_agent(source)
+        name = source.stem
+        for harness, config in registry.agent_configs().items():
             if harness_filter and harness != harness_filter:
                 continue
-            suffix = hconf["filename_suffix"]
-            out_path = HARNESSES_DIR / harness / "agents" / f"{name}{suffix}"
+            suffix = config["filename_suffix"]
+            target = HARNESSES_DIR / harness / "agents" / f"{name}{suffix}"
+            expected = _render_agent(frontmatter, body, config)
+            remediation = f"enchiridion sync --agents --harness {harness} --apply"
+            diagnostic = inspect_file("agents", target, expected, remediation)
+            if diagnostic.status is Status.ERROR:
+                diagnostic = Diagnostic(
+                    diagnostic.component,
+                    diagnostic.target,
+                    diagnostic.status,
+                    f"{harness}/agents/{target.name}: {diagnostic.summary}",
+                    expected=diagnostic.expected,
+                    actual=diagnostic.actual,
+                    remediation=diagnostic.remediation,
+                )
+            plans.append(FilePlan(target, expected, (diagnostic,)))
+    return plans
 
-            if apply:
-                # build frontmatter as a proper YAML dict, preserving declared field order
-                import yaml
 
-                fields = hconf.get("include_fields", ["description"])
-                frontmatter: dict = {}
-                for field in fields:
-                    if field in ("model", "tools"):
-                        frontmatter[field] = hconf[field]
-                    else:
-                        frontmatter[field] = fm[field]
-                fm_yaml = yaml.safe_dump(
-                    frontmatter, sort_keys=False, default_flow_style=False, width=10**9
-                ).rstrip("\n")
-                rendered = f"---\n{fm_yaml}\n---\n\n{canonical_body}"
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(rendered)
-                print(f"  RENDER {harness}: {out_path.name}")
-            elif out_path.exists():
-                existing = out_path.read_text()
-                # extract body (skip frontmatter)
-                bm = FM_RE.match(existing)
-                existing_body = existing[bm.end() :].lstrip("\n") if bm else existing
-                if existing_body.rstrip("\n") != canonical_body.rstrip("\n"):
-                    drift += 1
-                    print(f"  DRIFT  {harness}/agents/{out_path.name}: body differs from shared")
-            else:
-                drift += 1
-                print(f"  MISSING {harness}/agents/{out_path.name}")
-
-    return drift
+def check_agents(apply: bool, harness_filter: str | None = None) -> int:
+    """Render, or check, per-harness agent files from shared bodies. Return the drift count."""
+    plans = plan_agents(harness_filter)
+    errors = [
+        diagnostic
+        for plan in plans
+        for diagnostic in plan.diagnostics
+        if diagnostic.status is Status.ERROR
+    ]
+    for diagnostic in errors:
+        print(f"  DRIFT  {diagnostic.summary}")
+    if apply:
+        for plan in plans:
+            if not plan.needs_change or plan.expected is None:
+                continue
+            remediation = plan.diagnostics[0].remediation or "enchiridion sync --agents --apply"
+            result, changed = reconcile_file("agents", plan.target, plan.expected, remediation)
+            if changed and result.status is Status.OK:
+                print(f"  RENDER {_display_path(plan.target, HARNESSES_DIR)}")
+    return len(errors)
 
 
 def load_rules() -> list[tuple[Path, dict, str]]:
@@ -351,8 +420,6 @@ def build_claude_rules(rules: list[tuple[Path, dict, str]]) -> dict[str, str]:
     Requested and invoked rules are omitted from global native activation and
     remain reachable through the rules router skill.
     """
-    from . import render_rules
-
     marker = "<!-- generated by tools/sync.py from shared/rules/ — edit the rule, not this file -->"
     out: dict[str, str] = {}
     for path, _fm, _body in rules:
@@ -365,96 +432,213 @@ def build_claude_rules(rules: list[tuple[Path, dict, str]]) -> dict[str, str]:
     return out
 
 
+def plan_rule_files(rules: list[tuple[Path, dict, str]]) -> list[FilePlan]:
+    """Calculate generated rule artifacts and stale Claude rule files."""
+    expected_files = build_claude_rules(rules)
+    targets = [(ROUTER_SKILL, build_router(rules))]
+    targets.extend(
+        (CLAUDE_RULES_DIR / filename, content) for filename, content in expected_files.items()
+    )
+
+    plans: list[FilePlan] = []
+    remediation = "enchiridion sync --rules --apply"
+    for target, expected in targets:
+        diagnostic = inspect_file("rules", target, expected, remediation)
+        if diagnostic.status is Status.ERROR:
+            diagnostic = Diagnostic(
+                diagnostic.component,
+                diagnostic.target,
+                diagnostic.status,
+                f"{_display_path(target)}: {diagnostic.summary}",
+                expected=diagnostic.expected,
+                actual=diagnostic.actual,
+                remediation=diagnostic.remediation,
+            )
+        plans.append(FilePlan(target, expected, (diagnostic,)))
+
+    # Generated Claude files without canonical rules are planned for removal
+    if CLAUDE_RULES_DIR.exists():
+        for stale in sorted(CLAUDE_RULES_DIR.glob("*.md")):
+            if stale.name in expected_files:
+                continue
+            diagnostic = Diagnostic(
+                "rules",
+                stale,
+                Status.ERROR,
+                f"{_display_path(stale)}: no canonical rule",
+                actual=stale.read_text(),
+                remediation=remediation,
+            )
+            plans.append(FilePlan(stale, None, (diagnostic,)))
+    return plans
+
+
 def check_rules(apply: bool) -> int:
     """Validate rules and check, or with apply regenerate, the rule artifacts.
 
     Covers the router skill index and the Claude Code rules directory.
     Returns the drift count.
     """
-    rules = load_rules()
-    drift = 0
-
-    # router skill index
-    expected = build_router(rules)
-    if not (ROUTER_SKILL.exists() and ROUTER_SKILL.read_text() == expected):
-        drift += 1
-        if apply:
-            ROUTER_SKILL.parent.mkdir(parents=True, exist_ok=True)
-            ROUTER_SKILL.write_text(expected)
-            print("  RENDER shared/skills/rules/SKILL.md")
-        else:
-            print("  DRIFT  shared/skills/rules/SKILL.md: router index differs from shared/rules/")
-
-    # claude code path-scoped rules
-    expected_files = build_claude_rules(rules)
-    for filename, content in expected_files.items():
-        out_path = CLAUDE_RULES_DIR / filename
-        if out_path.exists() and out_path.read_text() == content:
-            continue
-        drift += 1
-        if apply:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_text(content)
-            print(f"  RENDER harnesses/claude-code/rules/{filename}")
-        else:
-            print(f"  DRIFT  harnesses/claude-code/rules/{filename}: differs from shared/rules/")
-    if CLAUDE_RULES_DIR.exists():
-        for stale in sorted(CLAUDE_RULES_DIR.glob("*.md")):
-            if stale.name in expected_files:
+    plans = plan_rule_files(load_rules())
+    errors = [
+        diagnostic
+        for plan in plans
+        for diagnostic in plan.diagnostics
+        if diagnostic.status is Status.ERROR
+    ]
+    for diagnostic in errors:
+        print(f"  DRIFT  {diagnostic.summary}")
+    if apply:
+        for plan in plans:
+            if not plan.needs_change:
                 continue
-            drift += 1
-            if apply:
-                stale.unlink()
-                print(f"  REMOVE harnesses/claude-code/rules/{stale.name}")
-            else:
-                print(f"  STALE  harnesses/claude-code/rules/{stale.name}: no canonical rule")
+            if plan.expected is None:
+                plan.target.unlink()
+                print(f"  REMOVE {_display_path(plan.target)}")
+                continue
+            remediation = plan.diagnostics[0].remediation or "enchiridion sync --rules --apply"
+            result, changed = reconcile_file("rules", plan.target, plan.expected, remediation)
+            if changed and result.status is Status.OK:
+                print(f"  RENDER {_display_path(plan.target)}")
+    return len(errors)
 
-    return drift
 
-
-def check_skills() -> int:
-    """Schema-validate shared skill frontmatter. Exits non-zero on errors."""
-    errors: list[str] = []
-    warnings: list[str] = []
-    for skill_md in sorted(SKILLS_DIR.glob("*/SKILL.md")):
-        rel = skill_md.relative_to(REPO)
-        text = skill_md.read_text()
-        m = FM_RE.match(text)
-        if not m:
-            errors.append(f"{rel}: missing frontmatter")
+def inspect_skills() -> list[Diagnostic]:
+    """Return schema, hygiene, and staleness diagnostics for shared skills."""
+    diagnostics: list[Diagnostic] = []
+    remediation = "edit the canonical skill and run enchiridion verify"
+    for skill_path in sorted(SKILLS_DIR.glob("*/SKILL.md")):
+        rel = skill_path.relative_to(REPO)
+        text = skill_path.read_text()
+        match = FM_RE.match(text)
+        if not match:
+            diagnostics.append(
+                Diagnostic(
+                    "skills",
+                    skill_path,
+                    Status.ERROR,
+                    f"{rel}: missing frontmatter",
+                    actual=text,
+                    remediation=remediation,
+                )
+            )
             continue
-        fm, err = load_frontmatter(m.group(1))
-        if err or not isinstance(fm, dict):
-            errors.append(f"{rel}: {err or 'frontmatter is not a mapping'}")
+        frontmatter, error = load_frontmatter(match.group(1))
+        if error or not isinstance(frontmatter, dict):
+            diagnostics.append(
+                Diagnostic(
+                    "skills",
+                    skill_path,
+                    Status.ERROR,
+                    f"{rel}: {error or 'frontmatter is not a mapping'}",
+                    actual=text,
+                    remediation=remediation,
+                )
+            )
             continue
+
+        # Validate required fields, directory identity, and body size
+        errors: list[str] = []
         for field in ("name", "description"):
-            if not fm.get(field):
-                errors.append(f"{rel}: missing required field '{field}'")
-        if fm.get("name") and fm["name"] != skill_md.parent.name:
-            errors.append(f"{rel}: name '{fm['name']}' != directory '{skill_md.parent.name}'")
-        body = text[m.end() :]
+            if not frontmatter.get(field):
+                errors.append(f"missing required field '{field}'")
+        if frontmatter.get("name") and frontmatter["name"] != skill_path.parent.name:
+            errors.append(f"name '{frontmatter['name']}' != directory '{skill_path.parent.name}'")
+        body = text[match.end() :]
         if len(body.splitlines()) > RULE_BODY_MAX_LINES:
-            errors.append(f"{rel}: body exceeds {RULE_BODY_MAX_LINES} lines")
+            errors.append(f"body exceeds {RULE_BODY_MAX_LINES} lines")
         lint_errors, lint_warnings = lint_common(
-            rel, fm, text, description_lints=skill_md != ROUTER_SKILL
+            rel,
+            frontmatter,
+            text,
+            description_lints=skill_path != ROUTER_SKILL,
         )
         errors.extend(lint_errors)
-        warnings.extend(lint_warnings)
-        # the generated router's staleness is covered by the rules it derives from
-        if skill_md != ROUTER_SKILL:
+        warnings = list(lint_warnings)
+        if skill_path != ROUTER_SKILL:
             stale = stale_warning(rel)
             if stale:
                 warnings.append(stale)
-    for w in warnings:
-        print(f"  WARN  {w}")
-    if errors:
-        for e in errors:
-            print(f"  ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
-    return 0
+
+        for message in errors:
+            diagnostics.append(
+                Diagnostic(
+                    "skills",
+                    skill_path,
+                    Status.ERROR,
+                    f"{rel}: {message}",
+                    actual=text,
+                    remediation=remediation,
+                )
+            )
+        for message in warnings:
+            diagnostics.append(
+                Diagnostic(
+                    "skills",
+                    skill_path,
+                    Status.WARNING,
+                    str(message),
+                    actual=text,
+                    remediation=remediation,
+                )
+            )
+        if not errors and not warnings:
+            diagnostics.append(
+                Diagnostic(
+                    "skills",
+                    skill_path,
+                    Status.OK,
+                    f"{rel}: schema and hygiene checks pass",
+                    actual=text,
+                )
+            )
+    return diagnostics
 
 
-def main():
+def check_skills() -> int:
+    """Schema-validate shared skill frontmatter and return the error count."""
+    diagnostics = inspect_skills()
+    for diagnostic in diagnostics:
+        if diagnostic.status is Status.WARNING:
+            print(f"  WARN  {diagnostic.summary}")
+        elif diagnostic.status is Status.ERROR:
+            print(f"  ERROR: {diagnostic.summary}", file=sys.stderr)
+    return sum(item.status is Status.ERROR for item in diagnostics)
+
+
+def run_checks(
+    *,
+    apply: bool = False,
+    agents: bool = False,
+    rules: bool = False,
+    skills: bool = False,
+    all_checks: bool = False,
+    harness: str | None = None,
+) -> int:
+    """Run selected repository checks and return the total error count."""
+    only_flags = agents or rules or skills
+    do_blocks = not only_flags or all_checks
+    do_agents = agents or all_checks
+    do_rules = rules or all_checks
+    do_skills = skills or all_checks
+
+    drift = 0
+    if do_blocks:
+        print("Checking blocks...")
+        drift += check_blocks(apply, harness)
+    if do_agents:
+        print("Checking agents...")
+        drift += check_agents(apply, harness)
+    if do_rules:
+        print("Checking rules...")
+        drift += check_rules(apply)
+    if do_skills:
+        print("Checking skills...")
+        drift += check_skills()
+    return drift
+
+
+def main() -> None:
     """Run the requested sync checks, applying changes when --apply is set."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="apply changes in place")
@@ -469,25 +653,14 @@ def main():
     parser.add_argument("--harness", help="limit to one harness")
     args = parser.parse_args()
 
-    only_flags = args.agents or args.rules or args.skills
-    do_blocks = not only_flags or args.all_
-    do_agents = args.agents or args.all_
-    do_rules = args.rules or args.all_
-    do_skills = args.skills or args.all_
-
-    drift = 0
-    if do_blocks:
-        print("Checking blocks...")
-        drift += check_blocks(args.apply, args.harness)
-    if do_agents:
-        print("Checking agents...")
-        drift += check_agents(args.apply, args.harness)
-    if do_rules:
-        print("Checking rules...")
-        drift += check_rules(args.apply)
-    if do_skills:
-        print("Checking skills...")
-        drift += check_skills()
+    drift = run_checks(
+        apply=args.apply,
+        agents=args.agents,
+        rules=args.rules,
+        skills=args.skills,
+        all_checks=args.all_,
+        harness=args.harness,
+    )
 
     if drift == 0:
         print("OK — all harnesses in sync")

@@ -37,7 +37,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
-from . import registry, sync
+from . import registry
+from .frontmatter import FRONTMATTER_RE
 
 FORMATS = ("mdc", "copilot", "claude")
 
@@ -78,7 +79,7 @@ def render(
         raise ValueError(f"unknown format '{fmt}' (expected one of {FORMATS})")
 
     text = rule_path.read_text()
-    m = sync.FM_RE.match(text)
+    m = FRONTMATTER_RE.match(text)
     if not m:
         raise ValueError(f"{rule_path}: missing frontmatter")
     fm = yaml.safe_load(m.group(1))

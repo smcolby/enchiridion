@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 
-from . import registry
+from . import registry, rule_template, sync
 
 REPO = registry.REPO
 
@@ -146,16 +146,15 @@ def main():
     parser.add_argument("--agents", action="store_true", help="check agent bodies only")
     args = parser.parse_args()
 
-    cmd = [sys.executable, "-m", "enchiridion.sync"]
-    if args.harness:
-        cmd += ["--harness", args.harness]
-    cmd += ["--agents"] if args.agents else ["--all"]
-
-    result_sync = subprocess.run(cmd)
-    result_template = subprocess.run([sys.executable, "-m", "enchiridion.rule_template"])
+    sync_errors = sync.run_checks(
+        agents=args.agents,
+        all_checks=not args.agents,
+        harness=args.harness,
+    )
+    template_errors = rule_template.run_audit()
     budget = check_doctrine_budget()
     markdown = check_markdown_fidelity()
-    sys.exit(result_sync.returncode | result_template.returncode | budget | markdown)
+    sys.exit(bool(sync_errors) | bool(template_errors) | budget | markdown)
 
 
 if __name__ == "__main__":
