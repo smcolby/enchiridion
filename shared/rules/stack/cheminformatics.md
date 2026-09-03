@@ -1,5 +1,5 @@
 ---
-name: chemoinformatics
+name: cheminformatics
 description: >
   Molecular data pipeline conventions: SMILES sanitization and
   canonicalization, stereochemistry preservation, scaffold-aware splitting,

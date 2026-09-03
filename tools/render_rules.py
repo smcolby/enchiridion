@@ -15,10 +15,12 @@ registry) and the repo level (deployed by repo-seed). pi has no scoped-rule
 mechanism; there the global `rules` skill handles activation by description
 match, and repo-seed appends a rules hint to AGENTS.md instead.
 
-Claude Code has no description-based activation for rules: a rule without
-`paths` is always-on. Rendering to the claude format therefore skips
-`requested` and `invoked` tier rules (they activate through the `rules`
-skill); `scoped` renders with `paths` and `always` renders unconditional.
+Native path rules cannot preserve task-based activation consistently across
+harnesses. Rendering therefore skips `requested` and `invoked` rules by
+default so they remain routed through the `rules` skill. The
+`--include-requested` switch explicitly accepts native activation across the
+rule's declared scope. `scoped` rules render with paths or globs, and `always`
+rules render unconditionally.
 
 Rendered copies carry a provenance stamp (canonical path @ catalog commit) so
 the repo-seed skill can detect drift between a seeded repository and the
@@ -63,18 +65,15 @@ def render(
 ) -> tuple[str, str] | None:
     """Render one canonical rule to (filename, content).
 
-    Returns None when the rule's tier has no representation in the target
-    format. Provenance is included for repo-deployed copies (reseed diffs against the
+    Returns None when the rule's tier is excluded from native activation.
+    Provenance is included for repo-deployed copies (reseed diffs against the
     stamped commit) and omitted for catalog-committed renders, where the stamp
     would churn on every commit and git already tracks drift.
 
-    include_requested opens the claude target for `requested`-tier rules at
-    repo-local deployment time. Globally those rules must route through the
-    rules skill because Claude Code unscoped rules are always-on, but a
-    repo-local copy whose scope field is honored as `paths` activates the
-    same way Cursor or Copilot would scope it. Rules without scope render
-    unscoped (always-on for that repo) since their activation is genuinely
-    universal within the deploying repo's bounds.
+    include_requested explicitly opts requested rules into repo-local native
+    deployment. Their scope becomes native paths or globs. Rules without scope
+    become project-wide instructions, so callers must obtain explicit approval
+    before enabling this option. Invoked rules always remain in the rules skill.
     """
     import yaml
 
@@ -91,6 +90,11 @@ def render(
     name = fm["name"]
     description = " ".join(fm["description"].split())
     globs = ", ".join(fm.get("scope", []))
+    tier = fm.get("tier")
+
+    # Preserve semantic routing unless the caller accepts broad native activation
+    if tier == "invoked" or (tier == "requested" and not include_requested):
+        return None
 
     if fmt == "mdc":
         frontmatter = {
@@ -106,14 +110,8 @@ def render(
         }
         filename = f"{name}.instructions.md"
     else:
-        # claude rules have no description activation: an unscoped rule is
-        # always-on, so requested/invoked tiers stay with the rules skill
-        # unless include_requested opts the call in to repo-local deployment
-        tier = fm.get("tier")
-        if tier not in ("scoped", "always") and not (include_requested and tier == "requested"):
-            return None
         frontmatter = {"description": description}
-        if tier == "scoped" or (include_requested and tier == "requested" and fm.get("scope")):
+        if tier == "scoped" or (tier == "requested" and fm.get("scope")):
             frontmatter["paths"] = fm["scope"]
         filename = f"{name}.md"
 
@@ -136,7 +134,7 @@ def main():
     parser.add_argument(
         "--include-requested",
         action="store_true",
-        help="render requested-tier rules (repo-local deployment); scope becomes paths",
+        help="render requested-tier rules after accepting broad native activation",
     )
     args = parser.parse_args()
 
@@ -149,7 +147,7 @@ def main():
     for path in paths:
         rendered = render(path, args.format, include_requested=args.include_requested)
         if rendered is None:
-            print(f"  SKIP   {path.name}: tier has no {args.format} representation")
+            print(f"  SKIP   {path.name}: tier remains routed through the rules skill")
             continue
         filename, content = rendered
         if args.list:

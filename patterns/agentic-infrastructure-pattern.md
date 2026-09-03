@@ -111,12 +111,14 @@ Harness support for these tiers is uneven, which is precisely why the tier must 
 
 | Harness capability | `always` | `scoped` | `requested` | `invoked` |
 |---|---|---|---|---|
-| Native scoped rules, project-level only (Cursor `.cursor/rules/*.mdc`, Copilot `*.instructions.md` with `applyTo`) | native | native | native | native |
+| Native scoped rules, project-level only (Cursor `.cursor/rules/*.mdc`, Copilot `*.instructions.md` with `applyTo`) | native | native | via skill description | via skill |
 | Native scoped rules, user and project level (Claude Code `rules/` dirs with `paths` frontmatter) | native (rule without `paths`) | native | via skill description | via skill |
 | Directory-scoped instruction files (nested `CLAUDE.md`/`AGENTS.md`) | native | emulated via placement | via skill description | via skill |
 | Skills only (pi, or any harness with a skill directory) | inline in instructions | degraded to `requested` | native | native |
 
-Two Claude Code caveats shape the rendering. First, its rules have no description-based activation: a rule without `paths` is unconditionally in context, so `requested`-tier rules must not be rendered into its rule directories (they would degrade *upward*); they stay on the skill row. Second, `paths` rules trigger when the model *reads* a matching file, which covers edits (editing requires a prior read) but not greenfield writes of new files; the router skill remains wired as the description-match fallback for exactly that gap.
+Requested and invoked rules stay in the skill by default across native renderers. Native path metadata cannot express task or import relevance, so rendering a requested package rule with `**/*.py` would degrade it upward to a scoped rule for every Python file. Repo-local deployment may render requested rules only after the user explicitly accepts that broad activation.
+
+Claude Code adds a greenfield caveat. Its `paths` rules trigger when the model reads a matching file, which covers edits (editing requires a prior read) but not new files that do not yet exist. The router skill remains wired as the description-match fallback for that gap.
 
 **Tier degradation ladder:** when a harness cannot honor a tier natively, degrade *downward* (lazier), never upward. A `scoped` Python testing rule on a harness without glob rules becomes a `requested` skill with a strong description ("Apply when writing or modifying pytest tests..."), never an `always` block. Degrading upward is how monolithic config files re-emerge.
 
