@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bootstrap.py — wire all enchiridion symlinks and generated files.
+"""Install or repair enchiridion symlinks and generated files.
 
 Reads the harness registry (tools/harnesses.toml) and wires every installed
 harness: instruction files, configs, agents, and skills. Safe to re-run:
@@ -7,9 +7,9 @@ correct symlinks are skipped, broken ones replaced, generated files rewritten
 only when their rendered content changes.
 
 Usage:
-  python tools/bootstrap.py                   # wire everything
-  python tools/bootstrap.py --only PATH       # re-wire a single live file
-  enchiridion bootstrap --skill NAME      # wire one skill into all harnesses
+  enchiridion bootstrap                 # wire everything
+  enchiridion bootstrap --only PATH     # re-wire one live file
+  enchiridion bootstrap --skill NAME    # wire one skill into all harnesses
 """
 
 import argparse

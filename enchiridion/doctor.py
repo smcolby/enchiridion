@@ -6,7 +6,7 @@ wiring (symlinks, fences, renders), and surfaces harness-specific content for
 gap analysis.
 
 Usage:
-  python tools/report.py
+  enchiridion doctor
 """
 
 import datetime
@@ -17,7 +17,7 @@ import tomllib
 from pathlib import Path
 
 from rich import box
-from rich.console import Console  # pip install rich
+from rich.console import Console
 from rich.table import Table
 
 from . import registry, sync
@@ -158,7 +158,7 @@ def inspect_agents(errors: list, warnings: list):
                 row.append("[red]✗[/red]")
                 errors.append(
                     f"agent '{name}': rendered file missing in {h} "
-                    f"({short(rendered)}; run sync.py --agents --apply)"
+                    f"({short(rendered)}; run enchiridion sync --agents --apply)"
                 )
         table.add_row(*row)
 
@@ -187,8 +187,8 @@ def inspect_rules(errors: list, warnings: list):
     try:
         rules = sync.load_rules()
     except SystemExit:
-        console.print(f"\n  {_s_err('rule schema errors — see sync.py --rules output')}")
-        errors.append("rule schema validation failed (python tools/sync.py --rules)")
+        console.print(f"\n  {_s_err('rule schema errors: see enchiridion sync --rules output')}")
+        errors.append("rule schema validation failed (enchiridion sync --rules)")
         return
 
     table = Table(box=box.SIMPLE_HEAD, padding=(0, 2), pad_edge=False, show_edge=False)
@@ -399,7 +399,7 @@ def inspect_harness_wiring(errors: list, warnings: list):
 # ── generated-file drift ──────────────────────────────────────────────────────
 
 
-# single substitution definition shared with bootstrap.py — see registry.py
+# Reuse the substitution definition shared with bootstrap through the registry
 render_template = registry.render_template
 
 

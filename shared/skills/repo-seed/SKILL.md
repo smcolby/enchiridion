@@ -11,7 +11,7 @@ description: >
 
 # Repo Seed / Reseed
 
-Deploys catalog content into a repository as committable, provenance-stamped copies. The catalog lives in the enchiridion repository (resolve it via the real path of this SKILL.md); seeds live in `shared/seeds/`, rules in `shared/rules/`, and the renderer is `tools/render_rules.py`.
+Deploys catalog content into a repository as committable, provenance-stamped copies. The catalog lives in the enchiridion repository (resolve it via the real path of this SKILL.md); seeds live in `shared/seeds/`, rules in `shared/rules/`, and the renderer is `enchiridion rules render`.
 
 ## Seed (new or unseeded repo)
 
@@ -40,7 +40,7 @@ At most four questions, detected values offered as defaults:
 | Content | Action |
 |---|---|
 | Seed `AGENTS.md` | Instantiate from `shared/seeds/<archetype>/AGENTS.md`, filling project specifics; repo-owned after creation. Templates assume uv; when the env-manager axis resolves to pixi or conda, rewrite the Environment section for that manager while preserving the discipline (one declared manifest, a committed lockfile, no ad-hoc installs) |
-| `lang/*` rules for detected languages | For Cursor: render `.mdc` via `python tools/render_rules.py --format mdc --out <repo>/.cursor/rules <rule files>`. For Copilot CLI: render `.instructions.md` via `--format copilot --out <repo>/.github/instructions`. For Claude Code (when repo-local rules were selected or detected): render via `--format claude --out <repo>/.claude/rules`. Every renderer skips `requested` and `invoked` tiers by default, which stay with the `rules` skill. For pi: the global `rules` skill handles all activation; instead, append a rules hint to the repo `AGENTS.md` (see note below) |
+| `lang/*` rules for detected languages | Run the catalog environment from any working directory with `uv run --project <catalog> enchiridion --repo <catalog> rules render`. For Cursor, add `--format mdc --out <repo>/.cursor/rules <catalog rule files>`. For Copilot CLI, use `--format copilot --out <repo>/.github/instructions`; for Claude Code (when repo-local rules were selected or detected), use `--format claude --out <repo>/.claude/rules`. Every renderer skips `requested` and `invoked` tiers by default, which stay with the `rules` skill. For pi, the global `rules` skill handles all activation; append a rules hint to the repo `AGENTS.md` (see note below) |
 | `stack/*` rules matching detected dependencies | Confirm package relevance with the user, then keep requested stack rules in the `rules` skill by default. Native path rules cannot detect imports and would activate a `**/*.py` package rule for every Python file. Render selected stack rules with `--include-requested` only after the user explicitly accepts that project-wide activation |
 | Tool configs | Merge `shared/seeds/<archetype>/pyproject-fragment.toml` into the repo's `pyproject.toml` (never clobber existing sections; reconcile) and add the pre-commit config. The fragment is gate config only (ruff/pyright/pytest), valid under any environment manager |
 | Doctrine, playbooks, `task/*` rules | Never deployed; they stay global |

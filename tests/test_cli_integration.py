@@ -1,10 +1,8 @@
-"""Integration tests for packaged commands and compatibility entry points."""
+"""Integration tests for packaged command behavior and safety boundaries."""
 
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 REPO = Path(__file__).parents[1]
 
@@ -84,26 +82,107 @@ def test_sync_apply_repairs_isolated_checkout(tmp_path: Path) -> None:
     assert instruction.read_text() == ("<!-- block: rules -->\nCanonical\n<!-- /block: rules -->\n")
 
 
-@pytest.mark.parametrize(
-    ("package_arguments", "wrapper", "wrapper_arguments", "marker"),
-    [
-        (("sync", "--all"), "sync.py", ("--all",), "all harnesses in sync"),
-        (("rules", "audit"), "rule_template.py", (), "Atomic template:"),
-        (("eval", "inventory"), "counterfactual_eval.py", ("inventory",), "source items"),
-        (("doctor",), "report.py", (), "enchiridion system inspection"),
-    ],
-)
-def test_compatibility_entry_point_preserves_command_behavior(
-    package_arguments: tuple[str, ...],
-    wrapper: str,
-    wrapper_arguments: tuple[str, ...],
-    marker: str,
-) -> None:
-    # Run the packaged operation and its temporary compatibility entry point
-    packaged = _run("-m", "enchiridion", *package_arguments)
-    compatible = _run(str(REPO / "tools" / wrapper), *wrapper_arguments)
+def test_harness_remove_validates_archive_before_mutation(tmp_path: Path) -> None:
+    # Arrange a harness source and a conflicting archive destination
+    registry = tmp_path / "tools/harnesses.toml"
+    registry.parent.mkdir(parents=True)
+    live_root = tmp_path / "live"
+    instruction_live = (live_root / "AGENTS.md").as_posix()
+    registry.write_text(
+        f"""[harnesses.test]
+root = "{live_root.as_posix()}"
+instruction_file = "harnesses/test/AGENTS.md"
+instruction_live = "{instruction_live}"
+"""
+    )
+    source = tmp_path / "harnesses/test"
+    source.mkdir(parents=True)
+    (source / "AGENTS.md").write_text("source\n")
+    destination = tmp_path / "harnesses/_deprecated/test"
+    destination.mkdir(parents=True)
 
-    # Both paths retain exit semantics and an operation-specific result marker
-    assert compatible.returncode == packaged.returncode
-    assert marker in packaged.stdout
-    assert marker in compatible.stdout
+    # Request removal through the explicit destructive subcommand
+    result = _run(
+        "-m",
+        "enchiridion",
+        "--repo",
+        str(tmp_path),
+        "harness",
+        "remove",
+        "test",
+    )
+
+    # Validation fails before either repository path changes
+    assert result.returncode == 1
+    assert "archive destination already exists" in result.stderr
+    assert source.is_dir()
+    assert destination.is_dir()
+
+
+def test_harness_remove_rejects_registered_path_traversal(tmp_path: Path) -> None:
+    # Arrange a hostile registered name whose source would escape harnesses
+    registry = tmp_path / "tools/harnesses.toml"
+    registry.parent.mkdir(parents=True)
+    registry.write_text(
+        """[harnesses."../outside"]
+root = "~/unused"
+instruction_file = "harnesses/outside/AGENTS.md"
+instruction_live = "~/unused/AGENTS.md"
+"""
+    )
+    (tmp_path / "harnesses").mkdir()
+    source = tmp_path / "outside"
+    source.mkdir()
+    (source / "AGENTS.md").write_text("source\n")
+
+    # Attempt removal through the destructive boundary
+    result = _run(
+        "-m",
+        "enchiridion",
+        "--repo",
+        str(tmp_path),
+        "harness",
+        "remove",
+        "../outside",
+    )
+
+    # Untrusted path components never escape the harness archive tree
+    assert result.returncode == 1
+    assert "Invalid harness name" in result.stderr
+    assert source.is_dir()
+    assert not (tmp_path / "harnesses/outside").exists()
+
+
+def test_harness_remove_archives_validated_source(tmp_path: Path) -> None:
+    # Arrange an isolated harness with no live wiring declarations
+    registry = tmp_path / "tools/harnesses.toml"
+    registry.parent.mkdir(parents=True)
+    live_root = tmp_path / "live"
+    instruction_live = (live_root / "AGENTS.md").as_posix()
+    registry.write_text(
+        f"""[harnesses.test]
+root = "{live_root.as_posix()}"
+instruction_file = "harnesses/test/AGENTS.md"
+instruction_live = "{instruction_live}"
+"""
+    )
+    source = tmp_path / "harnesses/test"
+    source.mkdir(parents=True)
+    (source / "AGENTS.md").write_text("source\n")
+
+    # Remove the registered harness after validation
+    result = _run(
+        "-m",
+        "enchiridion",
+        "--repo",
+        str(tmp_path),
+        "harness",
+        "remove",
+        "test",
+    )
+
+    # The source moves intact into the explicit archive location
+    destination = tmp_path / "harnesses/_deprecated/test"
+    assert result.returncode == 0
+    assert not source.exists()
+    assert (destination / "AGENTS.md").read_text() == "source\n"

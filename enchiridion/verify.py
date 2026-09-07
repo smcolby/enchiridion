@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""verify.py — assert cross-harness congruence. Exits non-zero on drift.
+"""Assert repository and cross-harness integrity. Exit nonzero on drift.
 
-Checks blocks + agent bodies by default.
+Runs block, agent, rule, skill, atomic-source, budget, and Markdown checks by default.
 
 Usage:
-  python tools/verify.py                  # check all harnesses
-  python tools/verify.py --harness pi     # check one harness
-  python tools/verify.py --agents         # check agent bodies only
-
-Add to .git/hooks/pre-commit:
-  #!/bin/sh
-  python tools/verify.py
+  enchiridion verify                  # run every repository check
+  enchiridion verify --harness pi     # limit harness checks
+  enchiridion verify --agents         # limit projection checks to agents
 """
 
 import re
@@ -143,7 +139,11 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness", help="limit to one harness")
-    parser.add_argument("--agents", action="store_true", help="check agent bodies only")
+    parser.add_argument(
+        "--agents",
+        action="store_true",
+        help="limit harness projection checks to agent renders",
+    )
     args = parser.parse_args()
 
     sync_errors = sync.run_checks(

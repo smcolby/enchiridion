@@ -590,7 +590,7 @@ def _audit_markdown(inventory: tuple[ArtifactInventory, ...], errors: list[str])
     lines = [
         "# Atomic rule source audit",
         "",
-        "Generated from canonical source by `tools/rule_template.py`.",
+        "Generated from canonical source by `enchiridion rules audit`.",
         "",
         "## Coverage",
         "",

@@ -1,10 +1,10 @@
-# Harness registry — the single source of truth for harness topology.
-# Read by registry.py on behalf of sync.py, report.py, and bootstrap.py.
+# Harness registry: the single source of truth for harness topology
+# Read by enchiridion.registry for sync, doctor, verify, and bootstrap
 #
 # Top-level keys:
 #   skills                 shared skill names wired into every harness skill_dir
-#   doctrine_token_ceiling hard token ceiling for always-on doctrine; enforced by verify.py
-#   stale_months           rules/skills with no commit in this many months warn in sync/verify
+#   doctrine_token_ceiling hard token ceiling enforced by enchiridion verify
+#   stale_months           rules and skills with no recent commit warn during checks
 #
 # Per-harness keys:
 #   root              directory whose presence means the harness is installed
@@ -17,11 +17,11 @@
 #   [harnesses.<h>.agents]  frontmatter rendering rules for shared/agents/
 #
 # Adding a harness: add an entry here, add block fences to its instruction
-# file, then run bootstrap.py and sync.py --apply.
-# Dropping a harness: python tools/bootstrap.py --remove <name>, then delete
-# its entry here.
+# file, then run enchiridion bootstrap and enchiridion sync --apply
+# Dropping a harness: uv run enchiridion harness remove <name>, then delete
+# its entry here
 
-# shared skills wired into every harness that declares a skill_dir
+# Shared skills wired into every harness that declares a skill_dir
 skills = [
     "wiki-ops",
     "rules",
@@ -34,11 +34,11 @@ skills = [
     "repo-seed",
 ]
 
-# hard ceiling for total always-on doctrine (shared/blocks/*.md), in
-# approximate tokens; enforced by verify.py
+# Hard ceiling for total always-on doctrine (shared/blocks/*.md), in
+# approximate tokens, enforced by enchiridion verify
 doctrine_token_ceiling = 2500
 
-# rules and skills with no commit in this many months warn in sync/verify
+# Rules and skills with no commit in this many months warn during checks
 stale_months = 12
 
 [harnesses.pi]

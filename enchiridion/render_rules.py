@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""render_rules.py — render canonical rules into harness-native scoped-rule formats.
+r"""Render canonical rules into harness-native scoped-rule formats.
 
 Formats:
   mdc      Cursor project rules (.cursor/rules/<name>.mdc)
@@ -10,8 +10,8 @@ Formats:
 These formats are only meaningful for harnesses that support native glob-scoped
 rule activation: Cursor (mdc), Copilot CLI (copilot), and Claude Code (claude).
 Claude Code activates `paths`-scoped rules at both the user level (the catalog
-wires harnesses/claude-code/rules/ to ~/.claude/rules/ via sync.py and the
-registry) and the repo level (deployed by repo-seed). pi has no scoped-rule
+wires harnesses/claude-code/rules/ to ~/.claude/rules/ via `enchiridion sync`
+and the registry) and the repo level (deployed by repo-seed). pi has no scoped-rule
 mechanism; there the global `rules` skill handles activation by description
 match, and repo-seed appends a rules hint to AGENTS.md instead.
 
@@ -28,9 +28,9 @@ catalog. This module is also the rendering point for any future harness that
 declares native scoped-rule support in the registry.
 
 Usage:
-  python tools/render_rules.py --format mdc --out /path/to/repo/.cursor/rules \\
-      shared/rules/lang/python/*.md
-  python tools/render_rules.py --format copilot --list   # preview filenames only
+  enchiridion rules render --format mdc \\
+      --out /path/to/repo/.cursor/rules shared/rules/lang/python/*.md
+  enchiridion rules render --format copilot --list
 """
 
 import argparse

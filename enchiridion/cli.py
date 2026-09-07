@@ -124,11 +124,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     # Parse global checkout selection while preserving subcommand arguments
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(prog="enchiridion", add_help=False)
     parser.add_argument("--repo")
-    options, remaining = parser.parse_known_args(arguments)
-    if not remaining:
+    try:
+        options, remaining = parser.parse_known_args(arguments)
+    except SystemExit as error:
+        return error.code if isinstance(error.code, int) else 1
+    if not remaining or remaining == ["--help"]:
         _print_help()
+        return 0
+    if remaining == ["--version"]:
+        print(__version__)
         return 0
 
     command, *command_arguments = remaining

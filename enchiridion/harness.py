@@ -26,9 +26,13 @@ def remove_harness(name: str) -> None:
     Raises
     ------
     SystemExit
-        Raised before mutation when the harness is unknown, its source is
-        missing, or its archive destination already exists.
+        Raised before mutation when the harness name is invalid or unknown,
+        its source is missing, or its archive destination already exists.
     """
+    # Keep every destructive repository path within one harness directory
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        raise SystemExit(f"Invalid harness name: {name}")
+
     config = registry.harnesses().get(name)
     if config is None:
         raise SystemExit(f"Unknown harness: {name}")

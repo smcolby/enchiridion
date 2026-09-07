@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""registry.py — load tools/harnesses.toml, the single source of harness topology.
+"""Load tools/harnesses.toml as the single source of harness topology.
 
 Every command that needs harness wiring reads it through this module.
 Placeholder substitution for generated files is defined once in

@@ -21,7 +21,7 @@ dev = [
     "pre-commit>=4.6",
     "pyright>=1.1.410",
     "pytest>=8.0",
-    "ruff>=0.15.14",
+    "ruff>=0.15.16",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -51,4 +51,4 @@ convention = "numpy"
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["enchiridion", "tools"]
+include = ["enchiridion"]
