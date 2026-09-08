@@ -4,8 +4,8 @@ This repository is a data science project: EDA, notebooks, experiments, and ligh
 
 ## Environment
 
-- uv manages the environment: `uv venv` to create, `uv sync` to reproduce, `uv run <cmd>` to execute, `uv add <pkg>` (or `uv add --group dev <pkg>`) to manage dependencies.
-- `pyproject.toml` is the single source of project metadata; `uv.lock` is committed.
+- Use the environment manager declared by the repository. Activate its environment before running project commands. Ask before changing the manager or environment location.
+- Record dependencies through the declared project workflow. For an installable package, `pyproject.toml` owns package metadata. A separate environment manifest may own environment resolution.
 
 ## Notebook hygiene
 
@@ -22,7 +22,7 @@ This repository is a data science project: EDA, notebooks, experiments, and ligh
 ## Standing gates
 
 - ruff (lint + format) and pyright run via pre-commit on the package directory; notebooks are exempt from docstring gates but not from correctness.
-- `uv run pytest` covers the package; promoted pipeline code is tested like library code.
+- Run `python -m pytest` from the active environment to cover the package. Test promoted pipeline code like library code.
 
 ## Operating model
 

@@ -4,8 +4,8 @@ This repository is a Python command-line tool: the package at the repo root, ent
 
 ## Environment
 
-- uv manages the environment: `uv venv` to create, `uv sync` to reproduce, `uv run <cmd>` to execute, `uv add <pkg>` (or `uv add --group dev <pkg>`) to manage dependencies.
-- `pyproject.toml` is the single source of project metadata; `uv.lock` is committed.
+- Use the environment manager declared by the repository. Activate its environment before running project commands. Ask before changing the manager or environment location.
+- Record dependencies through the declared project workflow. For an installable package, `pyproject.toml` owns package metadata. A separate environment manifest may own environment resolution.
 
 ## CLI conventions
 
@@ -18,7 +18,7 @@ This repository is a Python command-line tool: the package at the repo root, ent
 ## Standing gates
 
 - ruff (lint + format) and pyright strict run via pre-commit and CI. The gates pair with the deployed coding rules: fix the code, never the gate.
-- `uv run pytest` before any commit that touches behavior; CLI behavior is tested at the function level, with a thin entry layer.
+- Run `python -m pytest` from the active environment before any commit that touches behavior. Test CLI behavior at the function level with a thin entry layer.
 
 ## Operating model
 

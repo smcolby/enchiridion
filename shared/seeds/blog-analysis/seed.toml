@@ -4,7 +4,7 @@ archetype = "blog-analysis"
 [axes]
 purpose = "blog-analysis"
 language = "python"
-env_manager = "uv"  # default; repo-seed overrides per detection/answer
+env_manager = "detect"  # Resolve from repository signals or the user's answer
 
 # canonical rules to render into the repo (paths relative to shared/rules/)
 rules = [
