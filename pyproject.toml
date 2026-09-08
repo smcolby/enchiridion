@@ -16,7 +16,7 @@ dependencies = [
 [project.scripts]
 enchiridion = "enchiridion.cli:main"
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "pre-commit>=4.6",
     "pyright>=1.1.410",

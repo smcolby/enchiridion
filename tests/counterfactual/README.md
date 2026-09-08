@@ -39,7 +39,7 @@ occurrences per 1,000 response words, equivalent to one occurrence per 10,000
 words. Override the decision margin without invalidating generated responses:
 
 ```bash
-uv run enchiridion eval report \
+python -m enchiridion eval report \
   --run-id <run-id> \
   --equivalence-margin 0.1
 ```
@@ -67,40 +67,40 @@ its structural table lines when every item in that section is omitted.
 Validate source mappings and evaluator names without contacting Ollama:
 
 ```bash
-uv run enchiridion eval inventory
+python -m enchiridion eval inventory
 ```
 
 Write the complete ignored coverage inventory, including source items without a
 deterministic evaluator:
 
 ```bash
-uv run enchiridion eval inventory --write-coverage
+python -m enchiridion eval inventory --write-coverage
 ```
 
 Estimate the screening matrix:
 
 ```bash
-uv run enchiridion eval estimate --seeds 8
+python -m enchiridion eval estimate --seeds 8
 ```
 
 Run up to 12 concurrent HTTP requests. Ollama queues them while the model processes
 available work:
 
 ```bash
-uv run enchiridion eval run --seeds 8
+python -m enchiridion eval run --seeds 8
 ```
 
 Regenerate a report from the latest completed run:
 
 ```bash
-uv run enchiridion eval report
+python -m enchiridion eval report
 ```
 
 Prepare every real evaluator match plus a deterministic sample of unmatched
 responses for manual boundary review:
 
 ```bash
-uv run enchiridion eval calibrate --run-id <run-id> --nonmatches 10
+python -m enchiridion eval calibrate --run-id <run-id> --nonmatches 10
 ```
 
 Strict vocabulary scoring excludes `navigate` and `leverage` because their
@@ -115,7 +115,7 @@ directive prose. Do not include a list marker, heading, table row, frontmatter, 
 code fence. Compare the candidate directly with the current canonical directive:
 
 ```bash
-uv run enchiridion eval trial \
+python -m enchiridion eval trial \
   --source-id <canonical-source-id> \
   --candidate <candidate.md> \
   --mode atomic \

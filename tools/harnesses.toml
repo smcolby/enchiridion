@@ -18,7 +18,7 @@
 #
 # Adding a harness: add an entry here, add block fences to its instruction
 # file, then run enchiridion bootstrap and enchiridion sync --apply
-# Dropping a harness: uv run enchiridion harness remove <name>, then delete
+# Dropping a harness: python -m enchiridion harness remove <name>, then delete
 # its entry here
 
 # Shared skills wired into every harness that declares a skill_dir

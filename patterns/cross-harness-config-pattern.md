@@ -62,7 +62,6 @@ llm-config/
 ├── tools/
 │   └── harnesses.toml               # Single source of harness topology
 ├── pyproject.toml                   # Package metadata, CLI entry point, and gate configuration
-├── uv.lock                          # Reproducible application and development environment
 ├── .gitignore
 └── README.md
 ```
@@ -230,8 +229,8 @@ Exit codes:
 - `1`: one or more repository invariants failed
 
 ```bash
-uv run enchiridion verify
-uv run enchiridion verify --harness pi
+python -m enchiridion verify
+python -m enchiridion verify --harness pi
 ```
 
 The pre-commit configuration runs this command alongside Ruff and Pyright on every commit.
@@ -249,7 +248,7 @@ Repository integrity does not prove that the live system is wired. A correct ins
 - Generated-file drift with a unified diff and remediation instructions
 
 ```bash
-uv run enchiridion doctor
+python -m enchiridion doctor
 ```
 
 Exit codes:
@@ -264,7 +263,7 @@ Rich is a declared runtime dependency and formats the interactive report.
 
 **To change something universal** (e.g., update the git conventions):
 1. Edit `shared/blocks/git-conventions.md`
-2. Run `uv run enchiridion sync --apply`; this rewrites the fenced block in every harness file
+2. Run `python -m enchiridion sync --apply`; this rewrites the fenced block in every harness file
 3. Commit everything together
 
 **To change something harness-specific** (e.g., pi's model list):
@@ -273,14 +272,14 @@ Rich is a declared runtime dependency and formats the interactive report.
 
 **To add a new agent/persona:**
 1. Write `shared/agents/my-agent.md` with YAML frontmatter (`name` + `description`) followed by the body
-2. Run `uv run enchiridion sync --agents --apply`
+2. Run `python -m enchiridion sync --agents --apply`
 3. Commit the shared source and all rendered harness files together
 
 **To add a new harness:**
 1. Create `harnesses/{name}/` with its instruction file(s)
 2. Add a `[harnesses.{name}]` entry to `tools/harnesses.toml` with its wiring and agent rules; sync, doctor, and bootstrap all read it
 3. Add block fences for all shared blocks you want included
-4. Run `uv run enchiridion bootstrap && uv run enchiridion sync --apply && uv run enchiridion verify`
+4. Run `python -m enchiridion bootstrap && python -m enchiridion sync --apply && python -m enchiridion verify`
 
 ---
 
@@ -311,8 +310,8 @@ These scenarios are the acceptance test for the pattern: if any requires more th
 ### Changing a universal behavior (e.g., banning em-dashes and "it's not X, it's Y" patterns)
 
 1. Edit `shared/blocks/code-style.md` — add the rule in prose.
-2. Run `uv run enchiridion sync --apply`; this rewrites the `<!-- block: code-style -->` fence in `harnesses/pi/AGENTS.md`, `harnesses/claude-code/CLAUDE.md`, and `harnesses/copilot/copilot-instructions.md` simultaneously.
-3. Run `uv run enchiridion verify`; it exits `0` if all three fences match the canonical source.
+2. Run `python -m enchiridion sync --apply`; this rewrites the `<!-- block: code-style -->` fence in `harnesses/pi/AGENTS.md`, `harnesses/claude-code/CLAUDE.md`, and `harnesses/copilot/copilot-instructions.md` simultaneously.
+3. Run `python -m enchiridion verify`; it exits `0` if all three fences match the canonical source.
 4. Commit. Because all three harness files are already symlinked into `~/.pi/agent/`, `~/.claude/`, and `~/.github/`, the change is live immediately with no further propagation step.
 
 Alternatively, ask any agent that has access to this repo: *"Add a rule to code-style.md banning em-dashes and 'it's not X, it's Y' phrasings, then sync and verify."* The agent edits the one file, runs `enchiridion sync --apply`, runs `enchiridion verify`, and reports back. The symlinks do the rest.
@@ -328,8 +327,8 @@ Alternatively, ask any agent that has access to this repo: *"Add a rule to code-
 A skill whose activation is entirely description-driven requires only one artifact: the `SKILL.md` file. The skill description carries the full activation signal; the context budget stays honest without a companion doctrine block.
 
 1. Write `shared/skills/wiki-ops/SKILL.md` — the canonical skill definition, with `name` and `description` frontmatter. The description carries the full activation signal ("use when working inside an llm-wiki project directory").
-2. Add the skill name to the registry's `skills` list, then run `uv run enchiridion bootstrap --skill wiki-ops`; this symlinks the skill into every harness's skill directory.
-3. Run `uv run enchiridion doctor` to confirm skill symlinks are valid across all harnesses.
+2. Add the skill name to the registry's `skills` list, then run `python -m enchiridion bootstrap --skill wiki-ops`; this symlinks the skill into every harness's skill directory.
+3. Run `python -m enchiridion doctor` to confirm skill symlinks are valid across all harnesses.
 
 An agent can own steps 2–3 entirely: *"Wire up the wiki-ops skill across all harnesses and verify congruence."*
 
@@ -342,11 +341,11 @@ An agent can own steps 2–3 entirely: *"Wire up the wiki-ops skill across all h
 ### Adding a new prompt template / persona (e.g., a new "scientist" agent)
 
 1. Write `shared/agents/scientist.md` with YAML frontmatter (`name` and `description` fields). The body follows — harness-agnostic prose, no harness-specific frontmatter.
-2. Run `uv run enchiridion sync --agents --apply`; this renders:
+2. Run `python -m enchiridion sync --agents --apply`; this renders:
    - `harnesses/pi/agents/scientist.md` (pi frontmatter: `description` only)
    - `harnesses/copilot/agents/scientist.agent.md` (Copilot frontmatter: `description`, `name`, `model`, `tools`)
    - `harnesses/claude-code/agents/scientist.md` (Claude Code subagent frontmatter: `name`, `description`, `tools` as a comma-separated string)
-3. Run `uv run enchiridion verify` to confirm rendered bodies match the canonical source.
+3. Run `python -m enchiridion verify` to confirm rendered bodies match the canonical source.
 4. Commit. The rendered files are in `harnesses/{pi,copilot,claude-code}/agents/`, which each harness reads directly: pi via its `prompts` path, Copilot via `~/.copilot/agents` symlink, Claude Code via `~/.claude/agents` symlink.
 
 **Single file authored:** `shared/agents/scientist.md`
@@ -359,9 +358,9 @@ An agent can own steps 2–3 entirely: *"Wire up the wiki-ops skill across all h
 
 This is the exact scenario that motivated this repo. When a harness becomes unavailable or undesirable, the goal is to remove it without touching anything shared.
 
-1. Run `uv run enchiridion harness remove {harness}`; this unlinks every declared symlink and generated file, then moves `harnesses/{harness}/` to `harnesses/_deprecated/{harness}/` (kept in the repo for reference, not deleted).
+1. Run `python -m enchiridion harness remove {harness}`; this unlinks every declared symlink and generated file, then moves `harnesses/{harness}/` to `harnesses/_deprecated/{harness}/` (kept in the repo for reference, not deleted).
 2. Delete the harness entry from `tools/harnesses.toml`.
-3. Run `uv run enchiridion verify`; it should pass because the removed harness is no longer checked.
+3. Run `python -m enchiridion verify`; it should pass because the removed harness is no longer checked.
 4. Commit.
 
 Shared blocks, skills, and agent bodies are untouched. The remaining harnesses continue operating without interruption. If the harness comes back (billing restored, terms clarified), restore the registry entry, move the directory back, and re-run bootstrap.
@@ -377,17 +376,17 @@ Shared blocks, skills, and agent bodies are untouched. The remaining harnesses c
 `enchiridion bootstrap` is idempotent and safe to rerun. The sequence on a new machine:
 
 1. Clone the repo: `git clone ... ~/repos/llm-config`
-2. Run `uv sync --locked`, then `uv run enchiridion bootstrap` to create symlinks, wire skills, and report manual steps.
+2. Activate the machine's Python environment, then run `python -m pip install -e ".[dev]"` and `python -m enchiridion bootstrap` to create symlinks, wire skills, and report manual steps.
 3. Edit machine-specific values by hand (bootstrap prints a checklist):
    - `shared/models/ollama.json` — update Ollama `baseUrl` to this machine's address
    - Copy `~/.pi/agent/auth.json` from backup or recreate with API keys (never committed)
 4. Wire third-party tools per harness natively (plugin installs, hook configs, MCP registrations) — these are outside bootstrap's scope and documented in the repo's README.
-5. Run `uv run enchiridion verify` to confirm repository integrity, then `uv run enchiridion doctor` to inspect live wiring.
+5. Run `python -m enchiridion verify` to confirm repository integrity, then `python -m enchiridion doctor` to inspect live wiring.
 
 Machine-specific values are never committed and never synced. The repo is the config; the machine is the runtime. Bootstrap bridges the two.
 
 **Files changed:** machine-local only (auth.json, machine-specific JSON values)
-**Commands:** `uv sync --locked` → `enchiridion bootstrap` → `enchiridion verify` → `enchiridion doctor`
+**Commands:** environment activation → package installation → `enchiridion bootstrap` → `enchiridion verify` → `enchiridion doctor`
 **Committed changes:** none
 
 ---
@@ -398,7 +397,7 @@ Unlike adding a skill, updating one requires no bootstrap step — symlinks alre
 
 1. Edit `shared/skills/wiki-ops/SKILL.md` directly.
 2. The change is live immediately in every harness — each skill directory symlink points at the canonical file.
-3. Run `uv run enchiridion verify` to confirm repository integrity.
+3. Run `python -m enchiridion verify` to confirm repository integrity.
 4. Commit.
 
 There is no sync step because the skill directory is symlinked wholesale, not copied or rendered. The canonical file *is* the deployed file.
@@ -427,13 +426,13 @@ This is the scenario where you spend significant time in one harness, improve it
 
 **If the change should be universal:**
 1. Open `shared/blocks/<name>.md` and apply the same change there.
-2. Run `uv run enchiridion sync --apply` to propagate the updated block to every harness.
-3. Run `uv run enchiridion verify` and confirm it passes.
+2. Run `python -m enchiridion sync --apply` to propagate the updated block to every harness.
+3. Run `python -m enchiridion verify` and confirm it passes.
 4. Commit shared source + all harness files together.
 
 **If the change is harness-specific:**
 1. Open the harness instruction file and move the changed content to a line *outside* the fence (above or below the `<!-- block -->` markers).
-2. Run `uv run enchiridion sync --apply` to restore the shared fence while preserving the harness-specific text outside it.
+2. Run `python -m enchiridion sync --apply` to restore the shared fence while preserving the harness-specific text outside it.
 3. Commit.
 
 ⚠ Never run `--apply` when drift is intentional without promoting first. `--apply` always overwrites harness blocks with shared; the harness change will be lost.
@@ -460,7 +459,7 @@ For someone implementing this pattern from scratch, or restoring to a completely
    mkdir -p enchiridion tools
    ```
 
-3. **Declare and lock Python dependencies:** create `pyproject.toml` with a PEP 621 project, the `enchiridion` console entry point, PyYAML and Rich runtime dependencies, and development dependencies for the gate. Run `uv lock && uv sync --locked`.
+3. **Declare Python dependencies:** create `pyproject.toml` with a PEP 621 project, the `enchiridion` console entry point, PyYAML and Rich runtime dependencies, and a development extra for the gate. Activate the intended Python environment, then run `python -m pip install -e ".[dev]"`.
 
 4. **Write shared blocks** — create `shared/blocks/*.md` files, one per universal instruction topic (code style, guardrails, tool routing, etc.). These are plain prose — no fencing required in the canonical files.
 
@@ -470,17 +469,17 @@ For someone implementing this pattern from scratch, or restoring to a completely
 
 7. **Run initial sync:**
    ```bash
-   uv run enchiridion sync --apply
-   uv run enchiridion verify
+   python -m enchiridion sync --apply
+   python -m enchiridion verify
    ```
 
 8. **Implement live commands:** `enchiridion bootstrap` applies declared wiring, while `enchiridion doctor` inspects the same plans without mutation.
 
 9. **Run bootstrap and verify:**
    ```bash
-   uv run enchiridion bootstrap
-   uv run enchiridion verify
-   uv run enchiridion doctor
+   python -m enchiridion bootstrap
+   python -m enchiridion verify
+   python -m enchiridion doctor
    git add -A && git commit -m "Initialize cross-harness configuration"
    ```
 

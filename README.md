@@ -56,40 +56,39 @@ patterns/      design patterns plus the atomic rule source template
 enchiridion/   installable package: CLI, state plans, renderers, and evaluators
 tools/         harness registry
 pyproject.toml project metadata, dependencies, CLI entry point, and gate configuration
-uv.lock        reproducible application and development environment
 ```
 
 ## Command line interface
 
-Install the locked environment once with `uv sync --locked`, then run every operation through one CLI:
+Activate a Python 3.11+ environment using the manager appropriate to the machine, install the package, then run every operation through one CLI:
 
 | Command | Purpose |
 |---|---|
-| `uv run enchiridion sync` | Check or reconcile tracked projections from canonical content |
-| `uv run enchiridion verify` | Run the strict repository integrity gate |
-| `uv run enchiridion bootstrap` | Install or repair live harness wiring |
-| `uv run enchiridion doctor` | Inspect tracked and live state without mutation |
-| `uv run enchiridion harness remove <name>` | Unwire and archive one registered harness |
-| `uv run enchiridion rules render` | Render canonical rules into a native harness format |
-| `uv run enchiridion rules audit` | Validate and inventory atomic canonical sources |
-| `uv run enchiridion eval` | Estimate, run, score, calibrate, or trial counterfactual treatments |
+| `python -m enchiridion sync` | Check or reconcile tracked projections from canonical content |
+| `python -m enchiridion verify` | Run the strict repository integrity gate |
+| `python -m enchiridion bootstrap` | Install or repair live harness wiring |
+| `python -m enchiridion doctor` | Inspect tracked and live state without mutation |
+| `python -m enchiridion harness remove <name>` | Unwire and archive one registered harness |
+| `python -m enchiridion rules render` | Render canonical rules into a native harness format |
+| `python -m enchiridion rules audit` | Validate and inventory atomic canonical sources |
+| `python -m enchiridion eval` | Estimate, run, score, calibrate, or trial counterfactual treatments |
 
-Within the checkout, commands discover the repository through the working directory or editable installation. From another directory, select both the uv project and checkout explicitly: `uv run --project /path/to/enchiridion enchiridion --repo /path/to/enchiridion <command>`.
+Within the checkout, commands discover the repository through the working directory or editable installation. From another directory, use the installed package and pass the checkout explicitly: `python -m enchiridion --repo /path/to/enchiridion <command>`.
 
 ## Common tasks
 
-Run commands through the locked project environment. Every task ends with `uv run enchiridion verify` clean, then a commit. Symlinks make the commit live immediately.
+Run commands through the active project environment. Every task ends with `python -m enchiridion verify` clean, then a commit. Symlinks make the commit live immediately.
 
 **Change universal behavior** (style, guardrails, conventions):
 ```bash
 $EDITOR shared/blocks/<topic>.md
-uv run enchiridion sync --apply
+python -m enchiridion sync --apply
 ```
 
 **Add or update a coding rule:**
 ```bash
 $EDITOR shared/rules/lang/python/<name>.md  # or stack/, task/
-uv run enchiridion sync --rules --apply     # validates and regenerates rule artifacts
+python -m enchiridion sync --rules --apply  # validates and regenerates rule artifacts
 ```
 Prefer the `catalog-ingest` skill when adopting external content; it dedupes and hardens on the way in. Scoped rules reach Claude Code natively (rendered with `paths` frontmatter, symlinked to `~/.claude/rules/`); on pi they activate through the `rules` router skill by description match.
 
@@ -97,14 +96,14 @@ Prefer the `catalog-ingest` skill when adopting external content; it dedupes and
 ```bash
 $EDITOR shared/skills/<name>/SKILL.md        # frontmatter: name, description
 # New skill only: add it to the skills list in tools/harnesses.toml, then
-uv run enchiridion bootstrap --skill <name>
+python -m enchiridion bootstrap --skill <name>
 ```
 Edits to existing skills are live instantly; symlinks point at the source.
 
 **Add or update a persona:**
 ```bash
 $EDITOR shared/agents/<name>.md
-uv run enchiridion sync --agents --apply  # renders per-harness frontmatter
+python -m enchiridion sync --agents --apply  # renders per-harness frontmatter
 ```
 Personas carry stance only; procedure belongs in a playbook, conventions in a rule.
 
@@ -116,9 +115,9 @@ Personas carry stance only; procedure belongs in a playbook, conventions in a ru
 
 | Check | Command | When |
 |---|---|---|
-| Congruence, schemas, source template, doctrine budget | `uv run enchiridion verify` | Pre-commit (automatic) |
-| Atomic doctrine and rule map | `uv run enchiridion rules audit --write-audit` | Before evaluator changes or after source restructuring |
-| Live topology: wiring, symlinks, rules, drift | `uv run enchiridion doctor` | When things feel off |
+| Congruence, schemas, source template, doctrine budget | `python -m enchiridion verify` | Pre-commit (automatic) |
+| Atomic doctrine and rule map | `python -m enchiridion rules audit --write-audit` | Before evaluator changes or after source restructuring |
+| Live topology: wiring, symlinks, rules, drift | `python -m enchiridion doctor` | When things feel off |
 | Content rot: stale rules, pins, redundancy | `catalog-audit` skill | Scheduled; after model or stack upgrades |
 
 Two standing habits keep the catalog evidence-based: corrections made twice get captured as rule directives (the capture nudge in doctrine), and external content enters only through `catalog-ingest`.
@@ -126,14 +125,15 @@ Two standing habits keep the catalog evidence-based: corrections made twice get 
 ## Machine setup
 
 ```bash
-# install harnesses first — each must exist before wiring
+# Install harnesses first because each must exist before wiring
 npm install -g @anthropic-ai/claude-code @earendil-works/pi-coding-agent @github/copilot
 
 git clone git@github.com:smcolby/enchiridion.git ~/repos/enchiridion
 cd ~/repos/enchiridion
-uv sync --locked
-uv run enchiridion bootstrap
-uv run pre-commit install --hook-type pre-commit --hook-type commit-msg
+# Activate the Python 3.11+ environment appropriate to this machine
+python -m pip install -e ".[dev]"
+python -m enchiridion bootstrap
+python -m pre_commit install --hook-type pre-commit --hook-type commit-msg
 ```
 
 Third-party tools are wired per-harness natively after bootstrap:

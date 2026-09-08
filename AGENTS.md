@@ -4,8 +4,8 @@ This repository is the single source of truth for AI coding-assistant configurat
 
 ## Environment
 
-- Python 3.11+ with an installable repository-local package managed by uv. Runtime dependencies are PyYAML and Rich; development dependencies include pytest, pre-commit, Ruff, and Pyright. `pyproject.toml` is the manifest and `uv.lock` fixes the environment.
-- After cloning: `uv sync --locked`, then `uv run enchiridion bootstrap` and `uv run pre-commit install --hook-type pre-commit --hook-type commit-msg`.
+- Python 3.11+ with an installable repository-local package. Runtime dependencies are PyYAML and Rich; the `dev` extra includes pytest, pre-commit, Ruff, and Pyright. `pyproject.toml` is the package manifest.
+- Activate the environment appropriate to the machine, then run `python -m pip install -e ".[dev]"`, `python -m enchiridion bootstrap`, and `python -m pre_commit install --hook-type pre-commit --hook-type commit-msg`.
 
 ## The one invariant
 
@@ -13,15 +13,15 @@ A shared block is byte-for-byte identical in every harness that includes it. `en
 
 ## How to change things
 
-Every change ends with `uv run enchiridion verify` clean, then a commit. Symlinks make the commit live; edit the source in `shared/` or `harnesses/` instead of hand-editing enchiridion-managed live files (instruction files, settings, agents, rules). Third-party tool configs (hook JSONs, MCP configs, extension TypeScript) live outside the repo and are edited directly.
+Every change ends with `python -m enchiridion verify` clean, then a commit. Symlinks make the commit live; edit the source in `shared/` or `harnesses/` instead of hand-editing enchiridion-managed live files (instruction files, settings, agents, rules). Third-party tool configs (hook JSONs, MCP configs, extension TypeScript) live outside the repo and are edited directly.
 
-- **Universal behavior** (doctrine): edit `shared/blocks/<topic>.md`, then `uv run enchiridion sync --apply`. Doctrine has a hard token ceiling; net additions need a demotion candidate.
-- **A coding rule**: edit `shared/rules/<axis>/<name>.md` (frontmatter: name, description, tier, scope, stack), then `uv run enchiridion sync --rules --apply` to revalidate and regenerate the router index plus the Claude Code path-scoped renders in `harnesses/claude-code/rules/`. Prefer the `catalog-ingest` skill for external content.
-- **A persona**: edit `shared/agents/<name>.md` (stance only; procedure belongs in a playbook, constraints in a rule), then `uv run enchiridion sync --agents --apply`.
-- **A playbook or skill body**: edit `shared/skills/<name>/SKILL.md`; live instantly via symlink. New skills must be added to `tools/harnesses.toml` and wired with `uv run enchiridion bootstrap --skill <name>`.
+- **Universal behavior** (doctrine): edit `shared/blocks/<topic>.md`, then `python -m enchiridion sync --apply`. Doctrine has a hard token ceiling; net additions need a demotion candidate.
+- **A coding rule**: edit `shared/rules/<axis>/<name>.md` (frontmatter: name, description, tier, scope, stack), then `python -m enchiridion sync --rules --apply` to revalidate and regenerate the router index plus the Claude Code path-scoped renders in `harnesses/claude-code/rules/`. Prefer the `catalog-ingest` skill for external content.
+- **A persona**: edit `shared/agents/<name>.md` (stance only; procedure belongs in a playbook, constraints in a rule), then `python -m enchiridion sync --agents --apply`.
+- **A playbook or skill body**: edit `shared/skills/<name>/SKILL.md`; live instantly via symlink. New skills must be added to `tools/harnesses.toml` and wired with `python -m enchiridion bootstrap --skill <name>`.
 - **A project seed** (a repo archetype the `repo-seed` skill stamps into new projects): edit `shared/seeds/<archetype>/` (`seed.toml`, `AGENTS.md`, `pyproject-fragment.toml`, `pre-commit-config.yaml`). Consumed at seed time; no propagation step.
-- **A model config**: edit `shared/models/<provider>.{json,toml}`, then `uv run enchiridion bootstrap` to regenerate and rewire the per-harness model files.
-- **New wiring** (a new symlink target, generated file, or harness): `uv run enchiridion bootstrap`. Pure content edits do not need it.
+- **A model config**: edit `shared/models/<provider>.{json,toml}`, then `python -m enchiridion bootstrap` to regenerate and rewire the per-harness model files.
+- **New wiring** (a new symlink target, generated file, or harness): `python -m enchiridion bootstrap`. Pure content edits do not need it.
 
 ## Conventions
 

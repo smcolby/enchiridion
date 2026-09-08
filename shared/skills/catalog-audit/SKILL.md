@@ -25,4 +25,4 @@ Semantic staleness review of the catalog (the enchiridion repository; resolve it
 
 ## Output
 
-A findings list grouped by pass, each with a proposed action (update, delete, capture, promote, demote, reseed) and the file it touches. Apply approved actions, run `uv run enchiridion sync --rules --apply && uv run enchiridion verify`, and commit with a summary of what the audit re-checked and what it changed.
+A findings list grouped by pass, each with a proposed action (update, delete, capture, promote, demote, reseed) and the file it touches. Apply approved actions, run `python -m enchiridion sync --rules --apply && python -m enchiridion verify`, and commit with a summary of what the audit re-checked and what it changed.
