@@ -25,9 +25,10 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-import rule_template
+from . import rule_template
+from .paths import discover_repo
 
-REPO = Path(__file__).parent.parent
+REPO = discover_repo()
 DEFAULT_CONFIG = REPO / "tests/counterfactual/config.toml"
 DEFAULT_PROMPTS = REPO / "tests/counterfactual/prompts.toml"
 ARTIFACTS_DIR = REPO / ".counterfactual-artifacts"

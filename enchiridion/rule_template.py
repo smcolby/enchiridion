@@ -19,7 +19,9 @@ from pathlib import Path
 
 import yaml
 
-REPO = Path(__file__).parent.parent
+from .paths import discover_repo
+
+REPO = discover_repo()
 BLOCKS_DIR = REPO / "shared/blocks"
 RULES_DIR = REPO / "shared/rules"
 ARTIFACTS_DIR = REPO / ".counterfactual-artifacts"
@@ -588,7 +590,7 @@ def _audit_markdown(inventory: tuple[ArtifactInventory, ...], errors: list[str])
     lines = [
         "# Atomic rule source audit",
         "",
-        "Generated from canonical source by `tools/rule_template.py`.",
+        "Generated from canonical source by `enchiridion rules audit`.",
         "",
         "## Coverage",
         "",
@@ -688,17 +690,21 @@ def _print_verbose(inventory: tuple[ArtifactInventory, ...]) -> None:
                     print(f"    {line}")
 
 
-def main() -> None:
-    """Validate the source template and optionally write a complete audit map."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--verbose", action="store_true", help="print every parsed source item")
-    parser.add_argument(
-        "--write-audit",
-        action="store_true",
-        help="write ignored JSON and Markdown audit artifacts",
-    )
-    args = parser.parse_args()
+def run_audit(*, verbose: bool = False, write: bool = False) -> int:
+    """Validate canonical source structure and optionally write its audit map.
 
+    Parameters
+    ----------
+    verbose : bool, optional
+        Print every parsed source item and treatment.
+    write : bool, optional
+        Write ignored JSON and Markdown audit artifacts.
+
+    Returns
+    -------
+    int
+        Number of structural validation errors.
+    """
     inventory = load_inventory()
     errors = validate_inventory(inventory)
     counts = _summary(inventory)
@@ -710,15 +716,30 @@ def main() -> None:
         f"  {counts['kind:anti-hallucination']} anti-hallucination rows, "
         f"{counts['compound_candidates']} compound candidates"
     )
-    if args.verbose:
+    if verbose:
         _print_verbose(inventory)
-    if args.write_audit:
+    if write:
         json_path, markdown_path = write_audit(inventory, errors)
         print(f"Wrote {json_path.relative_to(REPO)}")
         print(f"Wrote {markdown_path.relative_to(REPO)}")
+    for error in errors:
+        print(f"ERROR: {error}", file=sys.stderr)
+    return len(errors)
+
+
+def main() -> None:
+    """Validate the source template and optionally write a complete audit map."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verbose", action="store_true", help="print every parsed source item")
+    parser.add_argument(
+        "--write-audit",
+        action="store_true",
+        help="write ignored JSON and Markdown audit artifacts",
+    )
+    args = parser.parse_args()
+
+    errors = run_audit(verbose=args.verbose, write=args.write_audit)
     if errors:
-        for error in errors:
-            print(f"ERROR: {error}", file=sys.stderr)
         raise SystemExit(1)
 
 

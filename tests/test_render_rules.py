@@ -1,14 +1,10 @@
 """Tests for native rule rendering and tier-based activation."""
 
-import sys
 from pathlib import Path
 
 import pytest
 
-TOOLS = Path(__file__).parents[1] / "tools"
-sys.path.insert(0, str(TOOLS))
-
-import render_rules  # noqa: E402
+from enchiridion import render_rules
 
 FORMATS = ("mdc", "copilot", "claude")
 

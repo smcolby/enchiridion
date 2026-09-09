@@ -33,4 +33,4 @@ Apply per candidate directive or artifact, not per source document:
 
 ## Close out
 
-Run `python tools/sync.py --rules --apply` and `python tools/verify.py` from the repo root; commit the canonical files and any regenerated router index together, citing the source.
+Run `python -m enchiridion sync --rules --apply` and `python -m enchiridion verify` from the repo root; commit the canonical files and any regenerated router index together, citing the source.

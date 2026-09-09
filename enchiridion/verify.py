@@ -1,29 +1,21 @@
 #!/usr/bin/env python3
-"""verify.py — assert cross-harness congruence. Exits non-zero on drift.
+"""Assert repository and cross-harness integrity. Exit nonzero on drift.
 
-Checks blocks + agent bodies by default.
+Runs block, agent, rule, skill, atomic-source, budget, and Markdown checks by default.
 
 Usage:
-  python tools/verify.py                  # check all harnesses
-  python tools/verify.py --harness pi     # check one harness
-  python tools/verify.py --agents         # check agent bodies only
-
-Add to .git/hooks/pre-commit:
-  #!/bin/sh
-  python tools/verify.py
+  enchiridion verify                  # run every repository check
+  enchiridion verify --harness pi     # limit harness checks
+  enchiridion verify --agents         # limit projection checks to agents
 """
 
 import re
 import subprocess
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-import registry  # noqa: E402
+from . import registry, rule_template, sync
 
-REPO = Path(__file__).parent.parent
-SYNC = REPO / "tools/sync.py"
-RULE_TEMPLATE = REPO / "tools/rule_template.py"
+REPO = registry.REPO
 
 # a line opening or closing a fenced code block: 3+ backticks or tildes
 FENCE_RE = re.compile(r"^(?P<indent>\s*)(?P<fence>`{3,}|~{3,})")
@@ -147,19 +139,22 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--harness", help="limit to one harness")
-    parser.add_argument("--agents", action="store_true", help="check agent bodies only")
+    parser.add_argument(
+        "--agents",
+        action="store_true",
+        help="limit harness projection checks to agent renders",
+    )
     args = parser.parse_args()
 
-    cmd = [sys.executable, str(SYNC)]
-    if args.harness:
-        cmd += ["--harness", args.harness]
-    cmd += ["--agents"] if args.agents else ["--all"]
-
-    result_sync = subprocess.run(cmd)
-    result_template = subprocess.run([sys.executable, str(RULE_TEMPLATE)])
+    sync_errors = sync.run_checks(
+        agents=args.agents,
+        all_checks=not args.agents,
+        harness=args.harness,
+    )
+    template_errors = rule_template.run_audit()
     budget = check_doctrine_budget()
     markdown = check_markdown_fidelity()
-    sys.exit(result_sync.returncode | result_template.returncode | budget | markdown)
+    sys.exit(bool(sync_errors) | bool(template_errors) | budget | markdown)
 
 
 if __name__ == "__main__":

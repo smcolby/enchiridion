@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""registry.py — load tools/harnesses.toml, the single source of harness topology.
+"""Load tools/harnesses.toml as the single source of harness topology.
 
-Every tool that needs harness wiring (sync.py, report.py, bootstrap.py) reads
-it through this module. Placeholder substitution for generated files is
-defined once in render_template(): bootstrap.py renders with it and report.py
-verifies against it, so generator and verifier can never disagree.
+Every command that needs harness wiring reads it through this module.
+Placeholder substitution for generated files is defined once in
+render_template(): bootstrap renders with it and doctor verifies against it,
+so generator and verifier cannot disagree.
 """
 
 import tomllib
 from pathlib import Path
 
-REPO = Path(__file__).parent.parent
+from .paths import discover_repo
+
+REPO = discover_repo()
 HOME = Path.home()
 REGISTRY_PATH = REPO / "tools/harnesses.toml"
 

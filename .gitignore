@@ -9,9 +9,13 @@ agent/auth.json
 # OS
 .DS_Store
 
-# Python build artifacts
+# Python environments and build artifacts
+.venv/
+dist/
+*.egg-info/
 __pycache__/
 *.pyc
+.pytest_cache/
 .ruff_cache/
 
 # Counterfactual evaluation outputs
