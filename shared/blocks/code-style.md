@@ -1,6 +1,12 @@
 - Sentence case for comments and print statements: capitalize the first word and acronyms; do not capitalize common technical terms mid-sentence unless they are proper nouns.
 - Do not number sequential steps inside code comment blocks.
 - Do not end comments with a period.
-- Comment each meaningful chunk of functionality so that reading the comments alone gives an overview of the function; add why-comments where rationale is not obvious.
-- Update comments and docstrings in the same edit as the code they describe; never reference the current task or change in a comment.
-- Precede a chunk comment with a blank line, unless it is the first line inside a newly indented block (immediately after a `:` that opens an `if`/`for`/`while`/`def`/`class`, etc.), where no blank line is needed.
+- Comment each meaningful chunk of functionality so the comments alone outline the function.
+- Write chunk comments as short, concrete, verb-first labels.
+- Use one line for a chunk comment when possible and two lines at most.
+- Add why-comments only when names and code cannot make the rationale clear.
+- Place a comment describing a conditional path immediately above the `if`, `elif`, or `else` it explains, never as the first line inside that branch.
+- Precede a chunk comment with a blank line unless it is the first line in a function or class body.
+- Update comments and docstrings in the same edit as the code they describe.
+- Describe stable code behavior in comments.
+- Never mention the current task, change, review, or reviewer in a comment.

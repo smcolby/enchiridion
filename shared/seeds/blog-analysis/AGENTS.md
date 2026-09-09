@@ -4,8 +4,8 @@ This repository is a lightweight analysis backing a blog post. `blogpost.md` at 
 
 ## Environment
 
-- uv manages the environment: `uv venv` to create, `uv sync` to reproduce, `uv run <cmd>` to execute, `uv add <pkg>` (or `uv add --group dev <pkg>`) to manage dependencies.
-- `pyproject.toml` is the single source of project metadata; `uv.lock` is committed.
+- Use the environment manager declared by the repository. Activate its environment before running project commands. Ask before changing the manager or environment location.
+- Record dependencies through the declared project workflow. For an installable package, `pyproject.toml` owns package metadata. A separate environment manifest may own environment resolution.
 
 ## The post
 

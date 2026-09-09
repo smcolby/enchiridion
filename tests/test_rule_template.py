@@ -27,7 +27,7 @@ def test_every_anti_hallucination_row_becomes_one_treatment() -> None:
         if item.kind == "anti-hallucination"
     ]
 
-    assert len(examples) == 158
+    assert len(examples) == 159
     assert all(item.treatment for item in examples)
     assert all(item.treatment.startswith("Banned: ") for item in examples if item.treatment)
     assert all("\nCorrect: " in item.treatment for item in examples if item.treatment)

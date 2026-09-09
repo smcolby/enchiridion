@@ -22,7 +22,7 @@ Inspect before asking anything:
 - **Languages**: file extensions present (or planned, for an empty repo).
 - **Stack**: `pyproject.toml` / lockfiles / imports (FastAPI, NumPy, etc.).
 - **Test framework**: test dirs, pytest config, imports.
-- **Environment manager**: `uv.lock` → uv; `pixi.toml` → pixi; `environment.yml` → conda; none → uv (the default for new projects).
+- **Environment workflow**: detect `uv.lock`, `pixi.toml`, `environment.yml`, requirements files, Poetry or PDM metadata, `.python-version`, `.envrc`, and the active environment. Treat no clear signal as unresolved.
 - **Harnesses in use**: `.cursor/`, `.github/copilot-*` or `.github/instructions/`, `.claude/`, existing `AGENTS.md`. For rule deployment the footprint is the harness's rule directory (`.cursor/rules/`, `.github/instructions/`, `.claude/rules/`): its presence means the repo already uses repo-local rules for that harness, so render there without asking.
 - **Existing instruction files**: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`. If harness-branded files exist without `AGENTS.md`, offer two paths and never create a second freestanding instruction file: **consolidate** (move content into a new `AGENTS.md`, shrink the branded files to one-line pointers) or **conform** (treat the existing file as the repo's canonical and apply the seed template's sections to it instead). Conform is the default for repos the user does not own.
 
@@ -32,14 +32,14 @@ At most four questions, detected values offered as defaults:
 
 1. Purpose archetype: `python-library`, `python-cli`, `python-service`, `data-science`, or `blog-analysis` (a lightweight analysis repo whose deliverable is a featured `blogpost.md`; pick the closest, and mixed repos take the dominant one).
 2. Strictness posture: adopt the seed's full gate config, or start lenient (gates warn, tighten later).
-3. Environment manager, only when detection is ambiguous or the repo is empty: uv (default), pixi, or conda. When conda is detected, confirm rather than assume: the team may be mid-migration.
+3. Environment workflow, only when detection is ambiguous or the repo is empty: ask which manager to use and whether the environment is shared across projects, project-specific outside the checkout, or repository-local. Offer detected tools and common choices such as conda, venv with direnv, uv, pixi, Poetry, or PDM without selecting a default.
 4. Target harness formats, only when no rule-directory footprint is detectable: Cursor project rules, Copilot instructions, Claude Code project rules, or none (AGENTS.md only). Context for the Claude option: the catalog already deploys scoped rules globally through the `~/.claude/rules` symlink, so repo-local `.claude/rules/` copies add value only for collaborators and CI without the catalog; default to none for solo repos. pi has no scoped-rule mechanism; there the global `rules` skill activates by description match.
 
 ### 3. Deploy per the selection matrix
 
 | Content | Action |
 |---|---|
-| Seed `AGENTS.md` | Instantiate from `shared/seeds/<archetype>/AGENTS.md`, filling project specifics; repo-owned after creation. Templates assume uv; when the env-manager axis resolves to pixi or conda, rewrite the Environment section for that manager while preserving the discipline (one declared manifest, a committed lockfile, no ad-hoc installs) |
+| Seed `AGENTS.md` | Instantiate from `shared/seeds/<archetype>/AGENTS.md` and fill project specifics. The result is repo-owned after creation. Replace the manager-neutral environment guidance with the detected or selected setup, activation, dependency, and command syntax. Preserve separate dependency authorities when package metadata and environment resolution live in different files |
 | `lang/*` rules for detected languages | Run the installed catalog package from any working directory with `python -m enchiridion --repo <catalog> rules render`. For Cursor, add `--format mdc --out <repo>/.cursor/rules <catalog rule files>`. For Copilot CLI, use `--format copilot --out <repo>/.github/instructions`; for Claude Code (when repo-local rules were selected or detected), use `--format claude --out <repo>/.claude/rules`. Every renderer skips `requested` and `invoked` tiers by default, which stay with the `rules` skill. For pi, the global `rules` skill handles all activation; append a rules hint to the repo `AGENTS.md` (see note below) |
 | `stack/*` rules matching detected dependencies | Confirm package relevance with the user, then keep requested stack rules in the `rules` skill by default. Native path rules cannot detect imports and would activate a `**/*.py` package rule for every Python file. Render selected stack rules with `--include-requested` only after the user explicitly accepts that project-wide activation |
 | Tool configs | Merge `shared/seeds/<archetype>/pyproject-fragment.toml` into the repo's `pyproject.toml` (never clobber existing sections; reconcile) and add the pre-commit config. The fragment is gate config only (ruff/pyright/pytest), valid under any environment manager |

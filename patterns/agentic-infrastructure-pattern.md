@@ -178,7 +178,7 @@ rules/
 │       ├── core.md          # idioms, typing, naming, error handling
 │       ├── testing.md       # pytest conventions
 │       ├── docs.md          # docstring and documentation conventions
-│       ├── packaging.md     # uv, pyproject, lockfile, src layout
+│       ├── packaging.md     # Environment workflow, metadata, locks, and layout
 │       └── security.md      # input validation, secrets, subprocess hygiene
 ├── stack/          # Stack-scoped: opt-in per repo, version-pinned
 │   ├── fastapi.md
@@ -299,7 +299,7 @@ Universal blocks: code style, writing conventions, git conventions, execution gu
 | `lang/python/core` | `scoped` on `**/*.py` | Full type annotations with modern syntax; guard clauses and early returns, happy path last; descriptive names with auxiliary verbs; module and package naming; logging over print; dataclasses/Pydantic over bare dicts at boundaries; anti-hallucination list (e.g. deprecated `typing` aliases, `os.path` where `pathlib` is standard) |
 | `lang/python/testing` | `scoped` on test globs | Pytest only; fixtures over setup methods; `parametrize` over loops; `tmp_path` over manual temp handling; one behavior per test, named for the behavior; no inter-test dependence; coverage policy and what not to test; property-based testing (hypothesis) for pure functions with rich input spaces |
 | `lang/python/docs` | `scoped` on `**/*.py` + docs globs | NumPy-style docstrings (the rule carries the *full* section-by-section spec so doctrine carries at most a one-line gesture); examples must be executable; README and API docs updated in the same change as the code they describe |
-| `lang/python/packaging` | `scoped` on `pyproject.toml`, lockfiles | uv for environments and installs; `pyproject.toml` as single source of project metadata; one declared package layout; exact-pin lockfile policy; ruff + pyright as the standing lint/type gate |
+| `lang/python/packaging` | `scoped` on package, dependency, environment, and lock files | Preserve the repository's environment manager, dependency authorities, package layout, and declared gates. Ask before introducing or migrating any of them |
 | `lang/python/security` | `requested` | Validate at system boundaries only; secrets never in code or committed config; `subprocess` without `shell=True`; pinned-dependency audit habits |
 | `stack/*` | `scoped`, opt-in per repo | Version-pinned framework rules (FastAPI, NumPy/SciPy, etc.), ingested from community catalogs via the ingest operation as needed |
 
@@ -321,10 +321,10 @@ The working set: `critic`, `tester`, `planner`, `executor`, `coordinator`, plus 
 
 | Seed | Axis | Contents |
 |---|---|---|
-| `python-library` | purpose | `AGENTS.md` template (env setup with uv, operating model, typical tasks), rule selection (`lang/python/*`), starter `pyproject.toml` + ruff/pyright/pytest/pre-commit config |
+| `python-library` | purpose | `AGENTS.md` template (detected or selected environment workflow, operating model, typical tasks), rule selection (`lang/python/*`), starter `pyproject.toml` plus ruff/pyright/pytest/pre-commit config |
 | `python-cli` | purpose | As above, plus CLI conventions (argument parsing, exit codes, stdout/stderr discipline) |
 | `python-service` | purpose + stack | As above, plus a stack rule opt-in (e.g. FastAPI) |
-| `data-science` | purpose | Notebook hygiene, uv-managed env, data/artifact gitignore policy, experiment logging conventions |
+| `data-science` | purpose | Notebook hygiene, detected or selected environment workflow, data/artifact gitignore policy, experiment logging conventions |
 
 Seeds are classified along the axes from the template-library ecosystem: purpose (what the repo is for), stack (what it is built with), and role (who the agent is acting as, mainly for non-coding seeds like sysadmin contexts).
 
