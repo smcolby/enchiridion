@@ -29,7 +29,6 @@ def remove_harness(name: str) -> None:
         Raised before mutation when the harness name is invalid or unknown,
         its source is missing, or its archive destination already exists.
     """
-    # Keep every destructive repository path within one harness directory
     if not name or name in {".", ".."} or "/" in name or "\\" in name:
         raise SystemExit(f"Invalid harness name: {name}")
 
@@ -64,7 +63,9 @@ def remove_harness(name: str) -> None:
     archive_root.mkdir(exist_ok=True)
     shutil.move(str(source), str(destination))
     print(f"  archived harnesses/{name} → harnesses/_deprecated/{name}")
-    print(f"  Done. Delete '{name}' from tools/harnesses.toml, then run enchiridion verify.")
+    print(
+        f"  Done. Delete '{name}' from tools/harnesses.toml, then run python -m enchiridion verify."
+    )
 
 
 def main() -> None:

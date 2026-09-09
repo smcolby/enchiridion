@@ -40,7 +40,5 @@ def moving_average(values: Sequence[float], window: int) -> list[float]:
 
 
 def _validate_window(length: int, window: int) -> None:
-    # private helper: underscore prefix exempts it from the docstring
-    # requirement; a comment suffices when behavior is non-obvious
     if not 1 <= window <= length:
         raise ValueError(f"window must be in 1..{length}, got {window}")

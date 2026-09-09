@@ -117,7 +117,7 @@ Correct: <correct cell>
 
 ## Enforcement
 
-`enchiridion rules audit` validates and inventories the canonical files. It
+`python -m enchiridion rules audit` validates and inventories the canonical files. It
 rejects malformed frontmatter, duplicate identifiers, unsupported heading levels,
 tables outside `Anti-hallucination`, and anti-hallucination tables whose columns
 are not exactly `Banned` and `Correct`.

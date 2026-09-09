@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Assert repository and cross-harness integrity. Exit nonzero on drift.
-
-Runs block, agent, rule, skill, atomic-source, budget, and Markdown checks by default.
-
-Usage:
-  enchiridion verify                  # run every repository check
-  enchiridion verify --harness pi     # limit harness checks
-  enchiridion verify --agents         # limit projection checks to agents
-"""
+"""Run the strict repository and cross-harness integrity gate."""
 
 import re
 import subprocess
@@ -17,13 +9,9 @@ from . import registry, rule_template, sync
 
 REPO = registry.REPO
 
-# a line opening or closing a fenced code block: 3+ backticks or tildes
 FENCE_RE = re.compile(r"^(?P<indent>\s*)(?P<fence>`{3,}|~{3,})")
-# an inline code span: a backtick run, literal content, a closing backtick run
 INLINE_CODE_RE = re.compile(r"`+[^`\n]*`+")
-# an escaped dollar sign (literal currency), which never opens a math span
 ESCAPED_DOLLAR_RE = re.compile(r"\\\$")
-# any signal that a file genuinely uses math, gating the noisier inline-$ check
 MATH_SIGNAL_RE = re.compile(r"\$\$|\\\(|\\\[|\\begin\{")
 
 
@@ -32,13 +20,14 @@ def check_doctrine_budget() -> int:
     ceiling = registry.load().get("doctrine_token_ceiling")
     if not ceiling:
         return 0
-    # chars/4 is a coarse but stable token approximation
+
+    # Approximate tokens consistently as four characters
     total = sum(len(p.read_text()) for p in (REPO / "shared/blocks").glob("*.md")) // 4
     print(f"Doctrine budget: ~{total} tokens (ceiling {ceiling})")
     if total <= ceiling:
         return 0
     print(
-        f"  OVER BUDGET by ~{total - ceiling} tokens — demote or remove doctrine"
+        f"  OVER BUDGET by ~{total - ceiling} tokens. Demote or remove doctrine"
         " content before adding more (see patterns/agentic-infrastructure-pattern.md)",
         file=sys.stderr,
     )
@@ -61,23 +50,27 @@ def _strip_code(text: str) -> tuple[str, bool]:
     """
     lines = text.split("\n")
     kept: list[str] = []
-    # the active fence as (marker char, opening run length), or None outside one
+
+    # Track the active fence marker and width
     fence: tuple[str, int] | None = None
     for line in lines:
         m = FENCE_RE.match(line)
+
+        # Detect opening fences with optional info strings
         if fence is None:
-            # an opening fence may carry an info string; a plain line is kept
             if m:
                 fence = (m.group("fence")[0], len(m.group("fence")))
             else:
                 kept.append(line)
             continue
-        # inside a fence: close only on a bare run of the same char, length >= opener
+
+        # Close only on a bare matching fence at least as wide as its opener
         char, length = fence
         marker = m.group("fence") if m else ""
         if m and marker[0] == char and len(marker) >= length and line.strip() == marker:
             fence = None
-        # every line within the fence, delimiters included, is dropped
+
+        # Exclude fenced content and delimiters from markup checks
     body = INLINE_CODE_RE.sub("", "\n".join(kept))
     return body, fence is not None
 
@@ -88,9 +81,11 @@ def _delimiter_issues(rel: str, text: str) -> list[str]:
     issues: list[str] = []
     if unterminated:
         issues.append(f"{rel}: unterminated fenced code block")
-    # drop escaped dollars first so literal currency never reads as a delimiter
+
+    # Remove escaped currency before counting math delimiters
     counted = ESCAPED_DOLLAR_RE.sub("", body)
-    # paired LaTeX delimiters must balance one-for-one
+
+    # Balance paired LaTeX delimiters
     for opener, closer, label in ((r"\(", r"\)", r"\(...\)"), (r"\[", r"\]", r"\[...\]")):
         n_open, n_close = counted.count(opener), counted.count(closer)
         if n_open != n_close:
@@ -99,12 +94,13 @@ def _delimiter_issues(rel: str, text: str) -> list[str]:
     n_end = len(re.findall(r"\\end\{", counted))
     if n_begin != n_end:
         issues.append(f"{rel}: unbalanced \\begin/\\end ({n_begin} begin, {n_end} end)")
-    # display math: $$ must occur in pairs
+
+    # Require display-math delimiters in pairs
     n_display = counted.count("$$")
     if n_display % 2:
         issues.append(f"{rel}: odd number of $$ display-math delimiters ({n_display})")
-    # inline math: enforce parity only when the file actually uses math, so a
-    # stray currency $ in plain prose is not a false positive
+
+    # Check inline math only in files with another math signal
     if MATH_SIGNAL_RE.search(counted):
         n_inline = counted.replace("$$", "").count("$")
         if n_inline % 2:

@@ -1,10 +1,10 @@
-# harnesses that consume this model config via a models.json symlink
+# List harnesses that consume this config through a models.json symlink
 harnesses = ["pi"]
 
-# harnesses that can use this provider but not via a models.json symlink
+# Explain harnesses that use this provider through another mechanism
 [notes]
 "claude-code" = "use 'OLLAMA_HOST=http://loki.local:11434 ollama launch claude' to switch Claude Code to Ollama; not wired via models.json. Note: loki's systemd override must use OLLAMA_HOST=0.0.0.0:11434 (with explicit port) — newer Ollama versions ignore 0.0.0.0 without a port"
 
-# harnesses that genuinely cannot use local model routing
+# Explain harnesses that cannot use local model routing
 [not_applicable]
 copilot = "cloud-hosted service; no local model routing"

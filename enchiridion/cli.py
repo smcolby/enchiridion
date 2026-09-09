@@ -37,12 +37,12 @@ def _print_help() -> None:
     print("  -h, --help   show this help")
 
 
-def _invoke(module_name: str, arguments: list[str]) -> int:
-    """Run a migrated module with an isolated argument vector."""
+def _invoke(module_name: str, command_name: str, arguments: list[str]) -> int:
+    """Run a command module under its public CLI name."""
     module = importlib.import_module(module_name)
     command_main: Callable[[], object] = module.main
     previous = sys.argv
-    sys.argv = [f"enchiridion {module_name.rsplit('.', 1)[-1]}", *arguments]
+    sys.argv = [f"enchiridion {command_name}", *arguments]
     try:
         result = command_main()
     except SystemExit as error:
@@ -64,9 +64,9 @@ def _dispatch_rules(arguments: list[str]) -> int:
         return 0
     operation, *remaining = arguments
     if operation == "render":
-        return _invoke("enchiridion.render_rules", remaining)
+        return _invoke("enchiridion.render_rules", "rules render", remaining)
     if operation == "audit":
-        return _invoke("enchiridion.rule_template", remaining)
+        return _invoke("enchiridion.rule_template", "rules audit", remaining)
     print(f"enchiridion rules: unknown operation '{operation}'", file=sys.stderr)
     return 2
 
@@ -78,7 +78,7 @@ def _dispatch_harness(arguments: list[str]) -> int:
         return 0
     operation, *remaining = arguments
     if operation == "remove" and len(remaining) == 1:
-        return _invoke("enchiridion.harness", ["remove", remaining[0]])
+        return _invoke("enchiridion.harness", "harness", ["remove", remaining[0]])
     if operation == "remove":
         print("enchiridion harness remove: expected one harness name", file=sys.stderr)
         return 2
@@ -99,7 +99,7 @@ def _dispatch(command: str, arguments: list[str]) -> int:
         "sync": "enchiridion.sync",
         "verify": "enchiridion.verify",
     }
-    return _invoke(modules[command], arguments)
+    return _invoke(modules[command], command, arguments)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

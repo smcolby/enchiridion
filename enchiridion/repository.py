@@ -104,7 +104,7 @@ def reconcile_file(
     if target.is_dir():
         return before, False
 
-    # Generated repository files are replaced from their canonical render
+    # Replace generated repository files from their canonical render
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(expected)
     return inspect_file(component, target, expected, remediation), True

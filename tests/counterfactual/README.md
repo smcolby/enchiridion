@@ -6,9 +6,9 @@ does not load instructions, skills, agents, or settings from any coding harness.
 
 ## Experimental arms
 
-Every prompt and seed has one shared baseline. `enchiridion rules audit` derives
+Every prompt and seed has one shared baseline. `python -m enchiridion rules audit` derives
 atomic items and identifiers directly from canonical Markdown. Evaluator bindings
-select source-derived identifiers without copying instruction text. Five treatment
+select source-derived identifiers without copying instruction text. Six treatment
 kinds are supported:
 
 - `directive`: one canonical top-level list item or directive paragraph
@@ -19,6 +19,8 @@ kinds are supported:
 - `full-rule`: the complete canonical rule body compared with the empty control
 - `leave-one-out`: the complete rule minus one canonical item, compared with the
   complete-rule response arm
+- `trial`: one candidate directive compared with its canonical atomic or full-rule
+  control
 
 Anti-hallucination rows are tested one at a time. They remain a distinct evidence
 class because many record a failure observed in real work. A zero ecological
@@ -130,7 +132,7 @@ content-addressed, and compatible canonical control responses are reused.
 
 A negative treatment-minus-control rate delta favors the candidate. Reports keep
 trial comparisons separate from addition and omission evidence. The selected
-source item's evaluator supplies the primary outcome; unmodified directives remain
+source item's evaluator supplies the primary outcome. Unmodified directives remain
 fixed context rather than separate treatments. Candidate text and hashes are
 stored in an immutable case record inside the ignored run manifest, not in a
 committed evaluator case file.

@@ -4,16 +4,16 @@
 
 An _enchiridion_ (Ancient Greek, "in the hand") is a concise handbook of precepts meant to be carried and consulted. This repo is that handbook for AI coding assistants: a single source of truth, authored once and deployed to every harness, so the rules your agents follow travel with them.
 
-Behavioral content is authored once, propagated to every harness by sync tooling, and deployed through symlinks, so committing a change is deploying it. Drift between harnesses is a verifiable state caught by pre-commit rather than a slow surprise.
+Behavioral content is authored once, projected into each harness format, and deployed through symlinks. Source edits are visible to new harness sessions immediately. Pre-commit blocks repository drift before the change is recorded.
 
 The repo implements two companion patterns:
 
-- **[patterns/cross-harness-config-pattern.md](patterns/cross-harness-config-pattern.md)**: the distribution system; how one canonical source reaches many harnesses (blocks, fences, rendering, symlinks, verification).
-- **[patterns/agentic-infrastructure-pattern.md](patterns/agentic-infrastructure-pattern.md)**: the content architecture; what that content is, how it is layered and scoped, and when the model sees it.
+- **[patterns/cross-harness-config-pattern.md](patterns/cross-harness-config-pattern.md)** describes the distribution system: how one canonical source reaches many harnesses through blocks, rendering, symlinks, and verification.
+- **[patterns/agentic-infrastructure-pattern.md](patterns/agentic-infrastructure-pattern.md)** describes the content architecture: what the catalog contains, how it is scoped, and when the model sees it.
 
 The **[atomic rule source template](patterns/atomic-rule-template.md)** defines the implicit Markdown structure used to derive counterfactual treatments directly from canonical doctrine and rules.
 
-This repository is one *instance* of those patterns, fitted to its owner's harnesses, languages, and conventions. To adopt the approach, point your LLM at the two pattern documents and mint your own instance; this repo then serves as a worked reference and starting point rather than something to fork wholesale.
+This repository is one *instance* of those patterns, fitted to its owner's harnesses, languages, and conventions. To adopt the approach, point your LLM at the two pattern documents and mint your own instance. This repo serves as a worked reference and starting point rather than something to fork wholesale.
 
 Design rationale lives in the patterns. This README covers what is here and how to use it.
 
@@ -47,11 +47,11 @@ shared/        canonical content
   blocks/      doctrine, fenced into each harness instruction file
   rules/       coding rules (lang/, stack/, prose/, task/), indexed into the `rules` router skill
                and rendered to Claude Code path-scoped rules (live via ~/.claude/rules)
-  agents/      persona bodies; frontmatter rendered per harness
-  skills/      playbooks + the generated rules router; symlinked into every harness
+  agents/      persona bodies with frontmatter rendered per harness
+  skills/      playbooks and the generated rules router, symlinked into every harness
   seeds/       repo archetypes: AGENTS.md template, gate configs, rule selection
   models/      shared model-provider configs
-harnesses/     per-harness composition: instruction file + configs + rendered agents
+harnesses/     per-harness instructions, configs, rendered agents, and native rules
 patterns/      design patterns plus the atomic rule source template
 enchiridion/   installable package: CLI, state plans, renderers, and evaluators
 tools/         harness registry
@@ -77,7 +77,7 @@ Within the checkout, commands discover the repository through the working direct
 
 ## Common tasks
 
-Run commands through the active project environment. Every task ends with `python -m enchiridion verify` clean, then a commit. Symlinks make the commit live immediately.
+Run commands through the active project environment. Every task ends with `python -m enchiridion verify` clean, then a commit. Symlinks make source edits live immediately.
 
 **Change universal behavior** (style, guardrails, conventions):
 ```bash
@@ -87,10 +87,10 @@ python -m enchiridion sync --apply
 
 **Add or update a coding rule:**
 ```bash
-$EDITOR shared/rules/lang/python/<name>.md  # or stack/, task/
+$EDITOR shared/rules/<axis>/<name>.md
 python -m enchiridion sync --rules --apply  # validates and regenerates rule artifacts
 ```
-Prefer the `catalog-ingest` skill when adopting external content; it dedupes and hardens on the way in. Scoped rules reach Claude Code natively (rendered with `paths` frontmatter, symlinked to `~/.claude/rules/`); on pi they activate through the `rules` router skill by description match.
+Prefer the `catalog-ingest` skill when adopting external content. It deduplicates and hardens material on the way in. Scoped rules reach Claude Code through native `paths` frontmatter and the `~/.claude/rules/` symlink. On pi, they activate through the `rules` router skill by description match.
 
 **Add or update a playbook:**
 ```bash
@@ -98,18 +98,18 @@ $EDITOR shared/skills/<name>/SKILL.md        # frontmatter: name, description
 # New skill only: add it to the skills list in tools/harnesses.toml, then
 python -m enchiridion bootstrap --skill <name>
 ```
-Edits to existing skills are live instantly; symlinks point at the source.
+Edits to existing skills are live instantly because symlinks point at the source.
 
 **Add or update a persona:**
 ```bash
 $EDITOR shared/agents/<name>.md
 python -m enchiridion sync --agents --apply  # renders per-harness frontmatter
 ```
-Personas carry stance only; procedure belongs in a playbook, conventions in a rule.
+Personas carry stance only. Procedure belongs in a playbook, and conventions belong in a rule.
 
-**Seed a repository:** invoke the `repo-seed` skill from any harness session in the target repo. It detects language, stack, environment manager, and existing instruction files, asks at most four questions, and deploys provenance-stamped rules plus an `AGENTS.md`.
+**Seed a repository:** invoke the `repo-seed` skill from any harness session in the target repo. It detects language, stack, environment workflow, and existing instruction files, asks at most four unresolved questions, and deploys provenance-stamped rules plus an `AGENTS.md`.
 
-**Reconcile drift** (`verify` reports that a harness file differs from shared): decide first, then act. Promote the change into `shared/` if it should be universal, or move it outside the block fence if harness-specific. `enchiridion sync --apply` overwrites fenced content with shared, so promote intentional changes first.
+**Reconcile drift** (`verify` reports that a harness file differs from shared): decide first, then act. Promote the change into `shared/` if it should be universal, or move it outside the block fence if harness-specific. `python -m enchiridion sync --apply` overwrites fenced content with shared, so promote intentional changes first.
 
 ## Maintenance
 
@@ -118,7 +118,7 @@ Personas carry stance only; procedure belongs in a playbook, conventions in a ru
 | Congruence, schemas, source template, doctrine budget | `python -m enchiridion verify` | Pre-commit (automatic) |
 | Atomic doctrine and rule map | `python -m enchiridion rules audit --write-audit` | Before evaluator changes or after source restructuring |
 | Live topology: wiring, symlinks, rules, drift | `python -m enchiridion doctor` | When things feel off |
-| Content rot: stale rules, pins, redundancy | `catalog-audit` skill | Scheduled; after model or stack upgrades |
+| Content rot: stale rules, pins, redundancy | `catalog-audit` skill | On schedule and after model or stack upgrades |
 
 Two standing habits keep the catalog evidence-based: corrections made twice get captured as rule directives (the capture nudge in doctrine), and external content enters only through `catalog-ingest`.
 
@@ -141,6 +141,6 @@ Third-party tools are wired per-harness natively after bootstrap:
 | Tool | Claude Code | pi | Copilot |
 |---|---|---|---|
 | RTK | already wired via `settings.json` hook | install pi extension | configure hook |
-| wiki-ops | clone llm-wiki anywhere, run `./tools/install.sh` once to wire the health-check hook, then work within it directly (`AGENTS.md` provides context) | clone; work within it directly | clone; work within it directly |
+| wiki-ops | Clone llm-wiki anywhere, run `./tools/install.sh` once to wire the health-check hook, then work within it directly (`AGENTS.md` provides context) | Clone and work within it directly | Clone and work within it directly |
 
 Never committed: API keys and `auth.json` files, `~/.claude.json` (harness-managed, may hold tokens), pi sandbox installs and session data, `harnesses/_deprecated/`.
