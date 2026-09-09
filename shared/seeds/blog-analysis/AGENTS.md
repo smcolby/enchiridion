@@ -1,6 +1,6 @@
-# Project Context — Blog Analysis
+# Project context: Blog analysis
 
-This repository is a lightweight analysis backing a blog post. `blogpost.md` at the repo root is the deliverable; everything else exists to produce its numbers and figures.
+This repository is a lightweight analysis backing a blog post. `blogpost.md` is the deliverable. Everything else produces its numbers and figures.
 
 ## Environment
 
@@ -9,23 +9,23 @@ This repository is a lightweight analysis backing a blog post. `blogpost.md` at 
 
 ## The post
 
-- `blogpost.md` is the featured artifact; the prose writing conventions deployed in this repo govern it strictly.
-- Every number, table, and figure in the post is produced by code in this repo and regenerable with a single documented command; a claim the analysis cannot reproduce does not go in the post.
-- Figures are generated into `figures/` by scripts, never hand-edited; regenerating them must be cheap enough to do on every revision.
-- When the analysis changes, the post changes in the same commit; a post that disagrees with the code behind it is a defect.
+- Apply the deployed prose conventions to `blogpost.md`.
+- Produce every number, table, and figure through one documented command. Exclude claims that the analysis cannot reproduce.
+- Generate figures into `figures/` through scripts. Do not edit them by hand.
+- Update the post in the same commit as its analysis. Treat disagreement between them as a defect.
 
 ## Analysis hygiene
 
-- Analysis code lives in `analysis/` as small, runnable scripts (or a notebook that runs clean top to bottom); logic reused across scripts graduates into package functions with tests.
-- `data/` and large outputs are gitignored; the repo stores code, configuration, and the post. Document how to obtain or regenerate data in the README.
-- Randomness is seeded and recorded; a result that cannot be reproduced does not exist.
+- Keep analysis code in small runnable scripts under `analysis/` or in a notebook that runs cleanly from top to bottom. Move reused logic into tested package functions.
+- Gitignore `data/` and large outputs. Document how to obtain or regenerate data in the README.
+- Seed and record randomness. Do not report a result that cannot be reproduced.
 
 ## Standing gates
 
-- ruff (lint + format) and pyright run via pre-commit; analysis scripts are exempt from docstring gates but not from correctness.
+- Run Ruff and Pyright through pre-commit. Analysis scripts are exempt from docstring gates, not correctness checks.
 - The prose conventions apply to `blogpost.md` and the README alike.
 
 ## Operating model
 
-- Prefer small, incremental, reviewable changes; follow the repository's commit conventions.
-- The coding rules deployed in this repo apply to all matching files; read them before editing.
+- Prefer small, reviewable changes. Follow the repository's commit conventions.
+- Read the deployed coding rules before editing matching files.

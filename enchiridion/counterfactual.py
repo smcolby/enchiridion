@@ -556,7 +556,7 @@ def validate_inventory(
             if source_item_id not in source_items:
                 errors.append(f"{case.id}: unknown source item '{source_item_id}'")
 
-        # Keep atomic, composed, full-rule, and omission semantics explicit
+        # Validate each case kind against its provenance rules
         if case.kind in {"directive", "anti-hallucination"}:
             if case.source_item_ids != (case.id,):
                 errors.append(f"{case.id}: atomic case must use its source-derived id")
@@ -1462,7 +1462,7 @@ def _bootstrap_delta_interval(
     if not pairs:
         return 0.0, 0.0
 
-    # Counter-addressed hashes produce reproducible draws without a global random state
+    # Derive reproducible draws without a global random state
     deltas: list[float] = []
     for sample_index in range(samples):
         selected: list[PairedCounts] = []
@@ -2201,7 +2201,7 @@ def _selected_cases(
     if unknown:
         raise ValueError(f"unknown cases: {', '.join(unknown)}")
 
-    # Composite and omission results require their generating control arms
+    # Include component and nonbaseline control arms needed for interpretation
     selected = set(requested)
     pending = list(requested)
     while pending:
@@ -2281,7 +2281,7 @@ def _load_manifest_run(
 
 
 def main() -> None:
-    """Validate, estimate, run, or report the counterfactual experiment."""
+    """Run an inventory, estimate, experiment, trial, report, or calibration."""
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     inventory_parser = subparsers.add_parser(

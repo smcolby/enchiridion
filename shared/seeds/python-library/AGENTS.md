@@ -1,4 +1,4 @@
-# Project Context — Python Library
+# Project context: Python library
 
 This repository is a Python library: the importable package at the repo root, tests beside it, public API documented with NumPy-style docstrings.
 
@@ -13,14 +13,14 @@ This repository is a Python library: the importable package at the repo root, te
 
 ## Standing gates
 
-- ruff (lint + format) and pyright strict run via pre-commit and CI. The gates pair with the deployed coding rules: fix the code, never the gate, and treat a suppression comment as a finding needing justification.
+- Ruff and Pyright strict run through pre-commit and CI. Fix the code rather than weakening a gate. Treat suppression comments as findings that need justification.
 - Run `python -m pytest` from the active environment before any commit that touches behavior.
 
 ## Operating model
 
-- Ask before changing the public API; API additions carry docstrings and tests in the same change.
-- Prefer small, incremental, reviewable changes; follow the repository's commit conventions.
-- The coding rules deployed in this repo apply to all matching files; read them before editing.
+- Ask before changing the public API. Add docstrings and tests with every API addition.
+- Prefer small, reviewable changes. Follow the repository's commit conventions.
+- Read the deployed coding rules before editing matching files.
 
 ## Typical tasks
 

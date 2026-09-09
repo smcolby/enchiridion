@@ -1,5 +1,5 @@
-# Seed template — copy to .pre-commit-config.yaml, run `pre-commit autoupdate`,
-# then `pre-commit install --hook-type pre-commit --hook-type commit-msg`
+# Copy this seed to .pre-commit-config.yaml
+# Refresh hook revisions, then install the pre-commit and commit-msg hooks
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.16

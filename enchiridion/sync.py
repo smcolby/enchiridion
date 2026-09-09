@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Propagate shared blocks, render agents, and index rules.
-
-Usage:
-  enchiridion sync                 # check block drift
-  enchiridion sync --apply         # rewrite fenced blocks
-  enchiridion sync --agents        # check rendered agents
-  enchiridion sync --rules         # check rules and generated indexes
-  enchiridion sync --skills        # validate skill frontmatter
-  enchiridion sync --all --apply   # reconcile every repository artifact
-"""
+"""Check or reconcile repository projections from canonical content."""
 
 import argparse
 import re
@@ -34,7 +25,7 @@ RULE_BODY_MAX_LINES = 500
 FRONTMATTER_TOKEN_BUDGET = 100
 STALE_MONTHS_DEFAULT = 12
 
-# machine-specific roots; portable forms (~/, $HOME, relative) are fine
+# Reject machine-specific roots while allowing portable path forms
 ABS_PATH_RE = re.compile(r"(?<![\w@.-])(?:/Users/|/home/|[A-Za-z]:\\)")
 
 HARNESS_INSTRUCTION_FILES = {
@@ -74,7 +65,7 @@ def plan_blocks(harness_filter: str | None = None) -> list[FilePlan]:
     for harness, path in HARNESS_INSTRUCTION_FILES.items():
         if harness_filter and harness != harness_filter:
             continue
-        remediation = f"enchiridion sync --harness {harness} --apply"
+        remediation = f"python -m enchiridion sync --harness {harness} --apply"
         if not path.is_file():
             diagnostic = Diagnostic(
                 "blocks",
@@ -145,7 +136,7 @@ def check_blocks(apply: bool, harness_filter: str | None = None) -> int:
             "blocks",
             plan.target,
             plan.expected,
-            errors[0].remediation or "enchiridion sync --apply",
+            errors[0].remediation or "python -m enchiridion sync --apply",
         )
         if changed and result.status is Status.OK:
             print(f"  FIXED  {_display_path(plan.target)}")
@@ -201,20 +192,15 @@ def stale_warning(rel: Path) -> str | None:
 def lint_common(
     rel, fm: dict, text: str, description_lints: bool = True
 ) -> tuple[list[str], list[str]]:
-    """Run the authoring-standards lints shared by rules and skills.
-
-    Returns (errors, warnings): hygiene violations are errors, quality
-    heuristics are warnings. description_lints is off for the generated
-    router index, whose description enumerates rule names as activation
-    keywords and grows with the catalog by design.
-    """
+    """Return shared authoring errors and warnings for rules or skills."""
     errors: list[str] = []
     warnings: list[str] = []
     if ABS_PATH_RE.search(text):
         errors.append(f"{rel}: machine-specific absolute path; use ~/-style or relative paths")
     if description_lints and fm.get("description"):
         warnings.extend(lint_description(rel, fm["description"]))
-        # scope globs are functional precision and exempt; the budget targets prose
+
+        # Exempt functional scope globs because the budget measures prose
         desc_tokens = len(fm["description"]) // 4
         if desc_tokens > FRONTMATTER_TOKEN_BUDGET:
             warnings.append(
@@ -225,7 +211,7 @@ def lint_common(
 
 
 def parse_shared_agent(path: Path):
-    """Parse a shared agent file into (frontmatter, body); exit on malformed input."""
+    """Parse shared agent frontmatter and body. Exit on malformed input."""
     text = path.read_text()
     m = FM_RE.match(text)
     if not m:
@@ -271,7 +257,7 @@ def plan_agents(harness_filter: str | None = None) -> list[FilePlan]:
             suffix = config["filename_suffix"]
             target = HARNESSES_DIR / harness / "agents" / f"{name}{suffix}"
             expected = _render_agent(frontmatter, body, config)
-            remediation = f"enchiridion sync --agents --harness {harness} --apply"
+            remediation = f"python -m enchiridion sync --agents --harness {harness} --apply"
             diagnostic = inspect_file("agents", target, expected, remediation)
             if diagnostic.status is Status.ERROR:
                 diagnostic = Diagnostic(
@@ -302,7 +288,9 @@ def check_agents(apply: bool, harness_filter: str | None = None) -> int:
         for plan in plans:
             if not plan.needs_change or plan.expected is None:
                 continue
-            remediation = plan.diagnostics[0].remediation or "enchiridion sync --agents --apply"
+            remediation = (
+                plan.diagnostics[0].remediation or "python -m enchiridion sync --agents --apply"
+            )
             result, changed = reconcile_file("agents", plan.target, plan.expected, remediation)
             if changed and result.status is Status.OK:
                 print(f"  RENDER {_display_path(plan.target, HARNESSES_DIR)}")
@@ -413,12 +401,7 @@ fix the code rather than fighting them.
 
 
 def build_claude_rules(rules: list[tuple[Path, dict, str]]) -> dict[str, str]:
-    """Render the committed Claude Code rules directory from canonical rules.
-
-    Claude Code activates these globally through the ~/.claude/rules symlink.
-    Requested and invoked rules are omitted from global native activation and
-    remain reachable through the rules router skill.
-    """
+    """Render scoped and always rules for Claude Code global activation."""
     marker = "<!-- generated by enchiridion sync; edit the canonical rule, not this file -->"
     out: dict[str, str] = {}
     for path, _fm, _body in rules:
@@ -440,7 +423,7 @@ def plan_rule_files(rules: list[tuple[Path, dict, str]]) -> list[FilePlan]:
     )
 
     plans: list[FilePlan] = []
-    remediation = "enchiridion sync --rules --apply"
+    remediation = "python -m enchiridion sync --rules --apply"
     for target, expected in targets:
         diagnostic = inspect_file("rules", target, expected, remediation)
         if diagnostic.status is Status.ERROR:
@@ -455,7 +438,7 @@ def plan_rule_files(rules: list[tuple[Path, dict, str]]) -> list[FilePlan]:
             )
         plans.append(FilePlan(target, expected, (diagnostic,)))
 
-    # Generated Claude files without canonical rules are planned for removal
+    # Remove generated Claude files without canonical rules
     if CLAUDE_RULES_DIR.exists():
         for stale in sorted(CLAUDE_RULES_DIR.glob("*.md")):
             if stale.name in expected_files:
@@ -473,11 +456,7 @@ def plan_rule_files(rules: list[tuple[Path, dict, str]]) -> list[FilePlan]:
 
 
 def check_rules(apply: bool) -> int:
-    """Validate rules and check, or with apply regenerate, the rule artifacts.
-
-    Covers the router skill index and the Claude Code rules directory.
-    Returns the drift count.
-    """
+    """Check or regenerate rule projections and return the drift count."""
     plans = plan_rule_files(load_rules())
     errors = [
         diagnostic
@@ -495,7 +474,9 @@ def check_rules(apply: bool) -> int:
                 plan.target.unlink()
                 print(f"  REMOVE {_display_path(plan.target)}")
                 continue
-            remediation = plan.diagnostics[0].remediation or "enchiridion sync --rules --apply"
+            remediation = (
+                plan.diagnostics[0].remediation or "python -m enchiridion sync --rules --apply"
+            )
             result, changed = reconcile_file("rules", plan.target, plan.expected, remediation)
             if changed and result.status is Status.OK:
                 print(f"  RENDER {_display_path(plan.target)}")
@@ -505,7 +486,7 @@ def check_rules(apply: bool) -> int:
 def inspect_skills() -> list[Diagnostic]:
     """Return schema, hygiene, and staleness diagnostics for shared skills."""
     diagnostics: list[Diagnostic] = []
-    remediation = "edit the canonical skill and run enchiridion verify"
+    remediation = "edit the canonical skill and run python -m enchiridion verify"
     for skill_path in sorted(SKILLS_DIR.glob("*/SKILL.md")):
         rel = skill_path.relative_to(REPO)
         text = skill_path.read_text()

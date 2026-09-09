@@ -4,28 +4,28 @@ This repository is the single source of truth for AI coding-assistant configurat
 
 ## Environment
 
-- Python 3.11+ with an installable repository-local package. Runtime dependencies are PyYAML and Rich; the `dev` extra includes pytest, pre-commit, Ruff, and Pyright. `pyproject.toml` is the package manifest.
+- Python 3.11+ with an installable repository-local package. Runtime dependencies are PyYAML and Rich. The `dev` extra includes Hypothesis, pytest, pre-commit, Ruff, and Pyright. `pyproject.toml` is the package manifest.
 - Activate the environment appropriate to the machine, then run `python -m pip install -e ".[dev]"`, `python -m enchiridion bootstrap`, and `python -m pre_commit install --hook-type pre-commit --hook-type commit-msg`.
 
 ## The one invariant
 
-A shared block is byte-for-byte identical in every harness that includes it. `enchiridion verify` enforces this; never edit a fenced block region in a harness file directly. The same discipline applies to rules (schema-valid frontmatter), agents (stance-only bodies), and the doctrine token ceiling.
+A shared block is byte-for-byte identical in every harness that includes it. `python -m enchiridion verify` enforces this. Never edit a fenced block region in a harness file directly. The same discipline applies to rules, agent bodies, and the doctrine token ceiling.
 
 ## How to change things
 
-Every change ends with `python -m enchiridion verify` clean, then a commit. Symlinks make the commit live; edit the source in `shared/` or `harnesses/` instead of hand-editing enchiridion-managed live files (instruction files, settings, agents, rules). Third-party tool configs (hook JSONs, MCP configs, extension TypeScript) live outside the repo and are edited directly.
+Every change ends with `python -m enchiridion verify` clean, then a commit. Symlinks make source edits live. Edit files in `shared/` or `harnesses/` instead of their managed live paths. Third-party hook, MCP, and extension configs live outside the repo and are edited directly.
 
-- **Universal behavior** (doctrine): edit `shared/blocks/<topic>.md`, then `python -m enchiridion sync --apply`. Doctrine has a hard token ceiling; net additions need a demotion candidate.
-- **A coding rule**: edit `shared/rules/<axis>/<name>.md` (frontmatter: name, description, tier, scope, stack), then `python -m enchiridion sync --rules --apply` to revalidate and regenerate the router index plus the Claude Code path-scoped renders in `harnesses/claude-code/rules/`. Prefer the `catalog-ingest` skill for external content.
-- **A persona**: edit `shared/agents/<name>.md` (stance only; procedure belongs in a playbook, constraints in a rule), then `python -m enchiridion sync --agents --apply`.
-- **A playbook or skill body**: edit `shared/skills/<name>/SKILL.md`; live instantly via symlink. New skills must be added to `tools/harnesses.toml` and wired with `python -m enchiridion bootstrap --skill <name>`.
-- **A project seed** (a repo archetype the `repo-seed` skill stamps into new projects): edit `shared/seeds/<archetype>/` (`seed.toml`, `AGENTS.md`, `pyproject-fragment.toml`, `pre-commit-config.yaml`). Consumed at seed time; no propagation step.
-- **A model config**: edit `shared/models/<provider>.{json,toml}`, then `python -m enchiridion bootstrap` to regenerate and rewire the per-harness model files.
-- **New wiring** (a new symlink target, generated file, or harness): `python -m enchiridion bootstrap`. Pure content edits do not need it.
+- **Universal behavior** (doctrine): edit `shared/blocks/<topic>.md`, then run `python -m enchiridion sync --apply`. Doctrine has a hard token ceiling. Net additions need a demotion candidate.
+- **A coding rule**: edit `shared/rules/<axis>/<name>.md`, then run `python -m enchiridion sync --rules --apply`. Rule frontmatter carries name, description, tier, scope, and stack metadata. Prefer the `catalog-ingest` skill for external content.
+- **A persona**: edit `shared/agents/<name>.md`, then run `python -m enchiridion sync --agents --apply`. Keep stance in the body, procedure in a playbook, and constraints in a rule.
+- **A playbook or skill body**: edit `shared/skills/<name>/SKILL.md`. Existing skills are live through symlinks. Register and bootstrap a new skill with `python -m enchiridion bootstrap --skill <name>`.
+- **A project seed**: edit `shared/seeds/<archetype>/`. Seeds are consumed at repository creation or refresh and have no propagation step.
+- **A model config**: edit `shared/models/<provider>.{json,toml}`. Existing symlinked content is live immediately. New model wiring requires a registry change and `python -m enchiridion bootstrap`.
+- **New wiring**: update the registry and run `python -m enchiridion bootstrap`. Pure content edits do not need it.
 
 ## Conventions
 
-- Follow the global doctrine and the deployed coding rules; consult the `rules` skill index before editing `enchiridion/*.py`.
-- One generator-verifier rule: placeholder substitution and registry topology live once in `enchiridion/registry.py`; never duplicate them into another module.
-- Generated files (rendered agents, router index, rendered Claude rules) are committed so `git diff` shows what changed; regenerate them with the relevant tool rather than editing by hand.
-- Do not bypass the gate. The commit-msg hook rejects conventional-commit prefixes and authorship footers; follow the git conventions in doctrine.
+- Follow the global doctrine and deployed coding rules. Consult the `rules` skill index before editing `enchiridion/*.py`.
+- Keep placeholder substitution and registry topology in `enchiridion/registry.py`. Never duplicate generator-verifier calculations.
+- Commit rendered agents, the router index, and Claude rules so `git diff` exposes changes. Regenerate them instead of editing them directly.
+- Do not bypass the gate. The commit-msg hook rejects conventional-commit prefixes and authorship footers. Follow the doctrine git conventions.

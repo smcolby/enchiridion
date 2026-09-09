@@ -1,6 +1,6 @@
-# Project Context — Data Science
+# Project context: Data science
 
-This repository is a data science project: EDA, notebooks, experiments, and light pipelines. Exploratory work lives in `notebooks/`; code that stabilizes graduates into the package directory.
+This repository is a data science project: EDA, notebooks, experiments, and light pipelines. Exploratory work lives in `notebooks/`. Stable code graduates into the package directory.
 
 ## Environment
 
@@ -9,22 +9,22 @@ This repository is a data science project: EDA, notebooks, experiments, and ligh
 
 ## Notebook hygiene
 
-- Every committed notebook runs clean top to bottom (`Restart & Run All`); hidden state and out-of-order execution are defects.
-- Outputs are stripped before commit (nbstripout or equivalent hook); plots and artifacts are regenerable, never the stored source of truth.
-- A notebook that is rerun more than a few times is a pipeline: promote its logic into package functions with tests, and let the notebook call them.
+- Run every committed notebook cleanly from top to bottom. Treat hidden state and out-of-order execution as defects.
+- Strip outputs before commit with nbstripout or an equivalent hook. Regenerate plots and artifacts from source.
+- Promote repeatedly used notebook logic into tested package functions. Let the notebook call those functions.
 
 ## Data and experiments
 
-- `data/`, model artifacts, and large outputs are gitignored; the repo stores code and configuration, never datasets. Document how to obtain or regenerate data in the README.
-- Experiments are reproducible: parameters, seeds, and metrics recorded per run (experiment log, tracked config files, or a tracking tool); a result that cannot be reproduced does not exist.
-- Train/test discipline per the project's domain rules: no leakage through global preprocessing before splits.
+- Gitignore `data/`, model artifacts, and large outputs. Document how to obtain or regenerate data in the README.
+- Record parameters, seeds, and metrics for every experiment. Do not report a result that cannot be reproduced.
+- Follow the project's train/test rules. Fit preprocessing within each split to prevent leakage.
 
 ## Standing gates
 
-- ruff (lint + format) and pyright run via pre-commit on the package directory; notebooks are exempt from docstring gates but not from correctness.
+- Run Ruff and Pyright through pre-commit on the package directory. Notebooks are exempt from docstring gates, not correctness checks.
 - Run `python -m pytest` from the active environment to cover the package. Test promoted pipeline code like library code.
 
 ## Operating model
 
-- Prefer small, incremental, reviewable changes; follow the repository's commit conventions.
-- The coding rules deployed in this repo apply to all matching files; read them before editing.
+- Prefer small, reviewable changes. Follow the repository's commit conventions.
+- Read the deployed coding rules before editing matching files.

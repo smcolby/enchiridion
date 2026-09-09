@@ -1,7 +1,4 @@
-# Exemplar pytest module for the python-testing rule: imitate its shape
-# (naming, fixtures, parametrization, property-based coverage), never its
-# domain. The subject under test is inlined so the module runs as written;
-# in a real repo it lives in the package and is imported.
+"""Demonstrate the test structure required by the Python testing rule."""
 
 import dataclasses
 import datetime
@@ -11,7 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 
-# subject under test, inlined to keep the exemplar self-contained
+# Define the subject inline so the exemplar executes independently
 @dataclasses.dataclass(frozen=True)
 class Token:
     user: str
@@ -31,14 +28,13 @@ def validate(token: Token, now: datetime.datetime) -> str:
 NOW = datetime.datetime(2026, 1, 1, tzinfo=datetime.UTC)
 
 
-# fixtures carry shared arrange steps; narrowest scope that works
+# Reuse a narrow fixture for shared setup
 @pytest.fixture
 def valid_token() -> Token:
     return Token(user="ada", expires_at=NOW + datetime.timedelta(hours=1))
 
 
-# one behavior per test, named for the behavior; arrange, act, assert
-# separated by blank lines, expected values as hand-computed constants
+# Check one behavior against hand-computed expectations
 def test_accepts_unexpired_token(valid_token: Token):
     result = validate(valid_token, now=NOW)
 
@@ -52,7 +48,7 @@ def test_rejects_expired_token():
         validate(token, now=NOW)
 
 
-# parametrize over loops in test bodies; ids name the non-obvious cases
+# Name non-obvious parameter cases
 @pytest.mark.parametrize(
     ("offset_seconds", "should_pass"),
     [(3600, True), (1, True), (0, False), (-3600, False)],
@@ -68,7 +64,7 @@ def test_expiry_boundary(offset_seconds: int, should_pass: bool):
             validate(token, now=NOW)
 
 
-# property-based test for a pure function with a rich input space
+# Exercise invariants over a rich input space
 @given(user=st.text(min_size=1))
 def test_returns_user_verbatim_for_any_name(user: str):
     token = Token(user=user, expires_at=NOW + datetime.timedelta(hours=1))

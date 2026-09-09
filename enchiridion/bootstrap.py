@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Install or repair enchiridion symlinks and generated files.
-
-Reads the harness registry (tools/harnesses.toml) and wires every installed
-harness: instruction files, configs, agents, and skills. Safe to re-run:
-correct symlinks are skipped, broken ones replaced, generated files rewritten
-only when their rendered content changes.
-
-Usage:
-  enchiridion bootstrap                 # wire everything
-  enchiridion bootstrap --only PATH     # re-wire one live file
-  enchiridion bootstrap --skill NAME    # wire one skill into all harnesses
-"""
+"""Install or repair live wiring declared by the harness registry."""
 
 import argparse
 import os
@@ -28,8 +17,6 @@ from .live import (
 from .registry import REPO, render_template
 
 WIRING = collect_harness_wiring(registry.harnesses(), REPO, registry.expand)
-
-# ── primitives ────────────────────────────────────────────────────────────────
 
 
 def link(src: Path, dst: Path) -> None:
@@ -50,9 +37,6 @@ def generate(src: Path, dst: Path) -> None:
         return
     action = "gen" if changed else "ok"
     print(f"  {action:<4} {dst}")
-
-
-# ── wiring ────────────────────────────────────────────────────────────────────
 
 
 def wire_harness(wiring: HarnessWiring) -> None:
@@ -79,7 +63,7 @@ def wire_skill(skill: str) -> None:
     """Symlink a shared skill into every installed harness's skill directory."""
     src = skill_source(skill)
     if src is None:
-        print(f"  WARN skill '{skill}' not found in shared/skills/ — skipping")
+        print(f"  WARN skill '{skill}' not found in shared/skills/. Skipping")
         return
     for wiring in WIRING.values():
         if wiring.skill_dir is None or not wiring.is_installed:
@@ -103,11 +87,8 @@ def wire_only(target: str) -> None:
     sys.exit(f"No registry entry has live path {selected}")
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
-
-
 def main() -> None:
-    """Wire all harnesses and skills, or remove one harness."""
+    """Wire all harnesses and registered skills."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--only", metavar="PATH", help="re-wire a single live file")
     parser.add_argument("--skill", metavar="NAME", help="wire one skill into all harnesses")
@@ -132,7 +113,7 @@ def main() -> None:
     print()
 
     print("=== Manual steps required ===")
-    print("  1. Edit shared/models/ollama.json — update Ollama baseUrl to this machine's address")
+    print("  1. Update the Ollama baseUrl in shared/models/ollama.json")
     print("  2. Create ~/.pi/agent/auth.json with API keys (never committed)")
     if not os.environ.get("OLLAMA_HOST"):
         print(
@@ -140,7 +121,7 @@ def main() -> None:
             " so 'ollama launch claude' routes to loki.local"
         )
     print()
-    print("Run 'enchiridion verify' to confirm congruence.")
+    print("Run 'python -m enchiridion verify' to confirm congruence.")
 
 
 if __name__ == "__main__":

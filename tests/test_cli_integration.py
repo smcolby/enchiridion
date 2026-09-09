@@ -39,11 +39,9 @@ instruction_live = "~/unused/AGENTS.md"
 
 
 def test_sync_dry_run_reports_drift_without_mutation(tmp_path: Path) -> None:
-    # Arrange an isolated checkout with one drifted canonical fence
     original = "<!-- block: rules -->\nDrifted\n<!-- /block: rules -->\n"
     instruction = _write_minimal_checkout(tmp_path, original)
 
-    # Run the package command without its explicit mutation switch
     result = _run(
         "-m",
         "enchiridion",
@@ -53,20 +51,17 @@ def test_sync_dry_run_reports_drift_without_mutation(tmp_path: Path) -> None:
         cwd=REPO,
     )
 
-    # Dry-run mode reports failure and preserves the file byte-for-byte
     assert result.returncode == 1
     assert "block 'rules' differs from shared" in result.stdout
     assert instruction.read_text() == original
 
 
 def test_sync_apply_repairs_isolated_checkout(tmp_path: Path) -> None:
-    # Arrange an isolated checkout with one drifted canonical fence
     instruction = _write_minimal_checkout(
         tmp_path,
         "<!-- block: rules -->\nDrifted\n<!-- /block: rules -->\n",
     )
 
-    # Apply the calculated repository plan
     result = _run(
         "-m",
         "enchiridion",
@@ -77,13 +72,11 @@ def test_sync_apply_repairs_isolated_checkout(tmp_path: Path) -> None:
         cwd=REPO,
     )
 
-    # Apply mode succeeds and changes only the fenced source range
     assert result.returncode == 0
     assert instruction.read_text() == ("<!-- block: rules -->\nCanonical\n<!-- /block: rules -->\n")
 
 
 def test_harness_remove_validates_archive_before_mutation(tmp_path: Path) -> None:
-    # Arrange a harness source and a conflicting archive destination
     registry = tmp_path / "tools/harnesses.toml"
     registry.parent.mkdir(parents=True)
     live_root = tmp_path / "live"
@@ -101,7 +94,6 @@ instruction_live = "{instruction_live}"
     destination = tmp_path / "harnesses/_deprecated/test"
     destination.mkdir(parents=True)
 
-    # Request removal through the explicit destructive subcommand
     result = _run(
         "-m",
         "enchiridion",
@@ -112,7 +104,6 @@ instruction_live = "{instruction_live}"
         "test",
     )
 
-    # Validation fails before either repository path changes
     assert result.returncode == 1
     assert "archive destination already exists" in result.stderr
     assert source.is_dir()
@@ -120,7 +111,6 @@ instruction_live = "{instruction_live}"
 
 
 def test_harness_remove_rejects_registered_path_traversal(tmp_path: Path) -> None:
-    # Arrange a hostile registered name whose source would escape harnesses
     registry = tmp_path / "tools/harnesses.toml"
     registry.parent.mkdir(parents=True)
     registry.write_text(
@@ -135,7 +125,6 @@ instruction_live = "~/unused/AGENTS.md"
     source.mkdir()
     (source / "AGENTS.md").write_text("source\n")
 
-    # Attempt removal through the destructive boundary
     result = _run(
         "-m",
         "enchiridion",
@@ -146,7 +135,6 @@ instruction_live = "~/unused/AGENTS.md"
         "../outside",
     )
 
-    # Untrusted path components never escape the harness archive tree
     assert result.returncode == 1
     assert "Invalid harness name" in result.stderr
     assert source.is_dir()
@@ -154,7 +142,6 @@ instruction_live = "~/unused/AGENTS.md"
 
 
 def test_harness_remove_archives_validated_source(tmp_path: Path) -> None:
-    # Arrange an isolated harness with no live wiring declarations
     registry = tmp_path / "tools/harnesses.toml"
     registry.parent.mkdir(parents=True)
     live_root = tmp_path / "live"
@@ -170,7 +157,6 @@ instruction_live = "{instruction_live}"
     source.mkdir(parents=True)
     (source / "AGENTS.md").write_text("source\n")
 
-    # Remove the registered harness after validation
     result = _run(
         "-m",
         "enchiridion",
@@ -181,7 +167,6 @@ instruction_live = "{instruction_live}"
         "test",
     )
 
-    # The source moves intact into the explicit archive location
     destination = tmp_path / "harnesses/_deprecated/test"
     assert result.returncode == 0
     assert not source.exists()

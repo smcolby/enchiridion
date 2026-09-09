@@ -1,36 +1,8 @@
 #!/usr/bin/env python3
-r"""Render canonical rules into harness-native scoped-rule formats.
+r"""Render canonical rules into Cursor, Copilot, or Claude scoped formats.
 
-Formats:
-  mdc      Cursor project rules (.cursor/rules/<name>.mdc)
-  copilot  Copilot path-scoped instructions (.github/instructions/<name>.instructions.md)
-  claude   Claude Code path-scoped rules (.claude/rules/<name>.md, also valid
-           at the user level under ~/.claude/rules/)
-
-These formats are only meaningful for harnesses that support native glob-scoped
-rule activation: Cursor (mdc), Copilot CLI (copilot), and Claude Code (claude).
-Claude Code activates `paths`-scoped rules at both the user level (the catalog
-wires harnesses/claude-code/rules/ to ~/.claude/rules/ via `enchiridion sync`
-and the registry) and the repo level (deployed by repo-seed). pi has no scoped-rule
-mechanism; there the global `rules` skill handles activation by description
-match, and repo-seed appends a rules hint to AGENTS.md instead.
-
-Native path rules cannot preserve task-based activation consistently across
-harnesses. Rendering therefore skips `requested` and `invoked` rules by
-default so they remain routed through the `rules` skill. The
-`--include-requested` switch explicitly accepts native activation across the
-rule's declared scope. `scoped` rules render with paths or globs, and `always`
-rules render unconditionally.
-
-Rendered copies carry a provenance stamp (canonical path @ catalog commit) so
-the repo-seed skill can detect drift between a seeded repository and the
-catalog. This module is also the rendering point for any future harness that
-declares native scoped-rule support in the registry.
-
-Usage:
-  enchiridion rules render --format mdc \\
-      --out /path/to/repo/.cursor/rules shared/rules/lang/python/*.md
-  enchiridion rules render --format copilot --list
+Requested and invoked rules remain in the router skill unless the caller accepts
+broader native activation. Repository copies include a provenance stamp.
 """
 
 import argparse
@@ -61,17 +33,34 @@ def render(
     include_provenance: bool = True,
     include_requested: bool = False,
 ) -> tuple[str, str] | None:
-    """Render one canonical rule to (filename, content).
+    """Render one canonical rule into a native harness format.
 
-    Returns None when the rule's tier is excluded from native activation.
-    Provenance is included for repo-deployed copies (reseed diffs against the
-    stamped commit) and omitted for catalog-committed renders, where the stamp
-    would churn on every commit and git already tracks drift.
+    Parameters
+    ----------
+    rule_path : pathlib.Path
+        Canonical rule source.
+    fmt : {"mdc", "copilot", "claude"}
+        Target harness format.
+    include_provenance : bool, optional
+        Add a source path and commit stamp for repository copies.
+    include_requested : bool, optional
+        Accept native activation of requested rules across their declared scope.
 
-    include_requested explicitly opts requested rules into repo-local native
-    deployment. Their scope becomes native paths or globs. Rules without scope
-    become project-wide instructions, so callers must obtain explicit approval
-    before enabling this option. Invoked rules always remain in the rules skill.
+    Returns
+    -------
+    tuple of (str, str) or None
+        Output filename and content, or ``None`` when the tier stays in the
+        router skill.
+
+    Raises
+    ------
+    ValueError
+        Raised for an unknown format or missing frontmatter.
+
+    Notes
+    -----
+    Invoked rules never render natively. Requested rules without a scope become
+    project-wide when explicitly included.
     """
     import yaml
 

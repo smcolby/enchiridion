@@ -1,4 +1,4 @@
-# Seed manifest — consumed by the repo-seed skill
+# Describe this archetype for the repo-seed skill
 archetype = "python-service"
 
 [axes]
@@ -6,7 +6,7 @@ purpose = "service"
 language = "python"
 env_manager = "detect"  # Resolve from repository signals or the user's answer
 
-# canonical rules to render into the repo (paths relative to shared/rules/)
+# Render these rules from paths relative to shared/rules
 rules = [
     "lang/python/core.md",
     "lang/python/testing.md",
@@ -16,6 +16,5 @@ rules = [
     "prose/writing-conventions.md",
 ]
 
-# stack rules are offered by repo-seed when the matching dependency is
-# detected (none authored yet; ingest as needed)
+# Offer matching stack rules when repo-seed detects their dependencies
 stack_rules = []

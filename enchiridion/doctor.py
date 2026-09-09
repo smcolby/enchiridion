@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
-"""Inspect enchiridion system topology and live installation health.
+"""Inspect repository topology and live installation health."""
 
-Shows all shared components and how each manifests per harness, verifies all
-wiring (symlinks, fences, renders), and surfaces harness-specific content for
-gap analysis.
-
-Usage:
-  enchiridion doctor
-"""
-
+import argparse
 import datetime
 import difflib
 import re
@@ -31,16 +24,13 @@ AGENTS_DIR = REPO / "shared/agents"
 MODELS_DIR = REPO / "shared/models"
 HARNESSES_DIR = REPO / "harnesses"
 
-# Live topology shares bootstrap's concrete registry calculation
+# Reuse bootstrap's concrete registry calculation
 HARNESS_WIRING = collect_harness_wiring(registry.harnesses(), REPO, registry.expand)
 HARNESS_FILES = {name: wiring.instruction_repo for name, wiring in HARNESS_WIRING.items()}
 SYMLINK_MAP = {name: wiring.symlinks for name, wiring in HARNESS_WIRING.items()}
 GENERATED_MAP = {name: wiring.generated for name, wiring in HARNESS_WIRING.items()}
 
 console = Console()
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
 
 
 def short(p: Path) -> str:
@@ -56,7 +46,7 @@ def short(p: Path) -> str:
 
 
 def check_symlink(src: Path, dst: Path) -> tuple[bool, str]:
-    """Return the shared symlink diagnostic in the report's display shape."""
+    """Return symlink health and a display-ready summary."""
     result = inspect_symlink(src, dst)
     return result.status is Status.OK, result.summary
 
@@ -84,11 +74,8 @@ def _harness_row(harness: str, content: str):
     console.print(f"    [dim]{harness:<14}[/dim]  {content}")
 
 
-# ── blocks ────────────────────────────────────────────────────────────────────
-
-
 def inspect_blocks(errors: list, warnings: list):
-    """Block fence presence per harness. Instruction file wiring is checked in HARNESS WIRING."""
+    """Report block fence presence and exact content by harness."""
     _section("SHARED BLOCKS  (fence presence per harness)")
 
     harnesses = list(HARNESS_FILES.keys())
@@ -122,16 +109,13 @@ def inspect_blocks(errors: list, warnings: list):
 
     console.print(table)
 
-    # Exact content diagnostics come from the same plans used by sync and verify
+    # Reuse exact content plans from sync and verify
     for plan in sync.plan_blocks():
         for diagnostic in plan.diagnostics:
             if diagnostic.status is not Status.ERROR:
                 continue
             errors.append(diagnostic.summary)
             console.print(f"  {_s_err(diagnostic.summary)}")
-
-
-# ── agents ────────────────────────────────────────────────────────────────────
 
 
 def inspect_agents(errors: list, warnings: list):
@@ -158,13 +142,13 @@ def inspect_agents(errors: list, warnings: list):
                 row.append("[red]✗[/red]")
                 errors.append(
                     f"agent '{name}': rendered file missing in {h} "
-                    f"({short(rendered)}; run enchiridion sync --agents --apply)"
+                    f"({short(rendered)}; run python -m enchiridion sync --agents --apply)"
                 )
         table.add_row(*row)
 
     console.print(table)
 
-    # Rendered frontmatter and bodies must match the canonical agent plan
+    # Compare rendered agents with the canonical plan
     for plan in sync.plan_agents():
         for diagnostic in plan.diagnostics:
             if diagnostic.status is not Status.ERROR:
@@ -173,11 +157,8 @@ def inspect_agents(errors: list, warnings: list):
             console.print(f"  {_s_err(diagnostic.summary)}")
 
 
-# ── rules ─────────────────────────────────────────────────────────────────────
-
-
 def inspect_rules(errors: list, warnings: list):
-    """Canonical rule catalog: schema, tiers, scopes, review dates, router freshness."""
+    """Report rule metadata, schema health, and projection freshness."""
     _section("RULES  (catalog + router skill index)")
 
     if not (REPO / "shared/rules").exists():
@@ -187,8 +168,10 @@ def inspect_rules(errors: list, warnings: list):
     try:
         rules = sync.load_rules()
     except SystemExit:
-        console.print(f"\n  {_s_err('rule schema errors: see enchiridion sync --rules output')}")
-        errors.append("rule schema validation failed (enchiridion sync --rules)")
+        console.print(
+            f"\n  {_s_err('rule schema errors: see python -m enchiridion sync --rules output')}"
+        )
+        errors.append("rule schema validation failed")
         return
 
     table = Table(box=box.SIMPLE_HEAD, padding=(0, 2), pad_edge=False, show_edge=False)
@@ -207,24 +190,25 @@ def inspect_rules(errors: list, warnings: list):
         table.add_row(fm["name"], fm["tier"], scope, stack, updated)
     console.print(table)
 
-    # Consume the same exact file plans used by sync and verify
+    # Reuse exact rule plans from sync and verify
     plans = sync.plan_rule_files(rules)
     router_plan = next(plan for plan in plans if plan.target == sync.ROUTER_SKILL)
     if not router_plan.needs_change:
         console.print(f"\n  {_s_ok('router index fresh', short(sync.ROUTER_SKILL))}")
     else:
-        console.print(f"\n  {_s_err('router index stale; run enchiridion sync --rules --apply')}")
+        console.print(
+            f"\n  {_s_err('router index stale; run python -m enchiridion sync --rules --apply')}"
+        )
         errors.append("rules router index stale or missing")
 
     claude_plans = [plan for plan in plans if plan.target != sync.ROUTER_SKILL]
     if all(not plan.needs_change for plan in claude_plans):
         console.print(f"  {_s_ok('claude rules fresh', short(sync.CLAUDE_RULES_DIR))}")
     else:
-        console.print(f"  {_s_err('claude rules stale; run enchiridion sync --rules --apply')}")
+        console.print(
+            f"  {_s_err('claude rules stale; run python -m enchiridion sync --rules --apply')}"
+        )
         errors.append("claude rules render stale, missing, or unrecognized")
-
-
-# ── skills ────────────────────────────────────────────────────────────────────
 
 
 def inspect_skills(errors: list, warnings: list):
@@ -248,7 +232,7 @@ def inspect_skills(errors: list, warnings: list):
         console.print("\n  [dim]no skills detected[/dim]")
         return
 
-    # only registry-managed skills are expected in every harness; others are local
+    # Check registered skills across harnesses while treating others as local
     registry_skills = set(registry.skills())
 
     for skill_name, by_harness in sorted(skills.items()):
@@ -266,7 +250,7 @@ def inspect_skills(errors: list, warnings: list):
 
             path = by_harness[harness]
 
-            # Registry skills share bootstrap's exact expected symlink calculation
+            # Compare registered skills with bootstrap's expected links
             if is_registry_skill:
                 source = REPO / "shared/skills" / skill_name
                 result = inspect_symlink(source, path)
@@ -277,7 +261,7 @@ def inspect_skills(errors: list, warnings: list):
                     errors.append(f"skill '{skill_name}': {harness} {result.summary}")
                 continue
 
-            # Unregistered skills are local diagnostics with no declared source
+            # Report unregistered skills without assuming a source
             if path.is_symlink():
                 link = str(path.readlink()).replace(str(HOME), "~")
                 if path.exists():
@@ -294,7 +278,7 @@ def inspect_skills(errors: list, warnings: list):
                 _harness_row(harness, _s_err(f"{short(path)} not found"))
                 errors.append(f"skill '{skill_name}': {harness} not wired")
 
-    # Canonical skill diagnostics share sync and verify's schema calculations
+    # Reuse skill schema diagnostics from sync and verify
     for diagnostic in sync.inspect_skills():
         if diagnostic.status is Status.ERROR:
             errors.append(diagnostic.summary)
@@ -302,9 +286,6 @@ def inspect_skills(errors: list, warnings: list):
         elif diagnostic.status is Status.WARNING:
             warnings.append(diagnostic.summary)
             console.print(f"  {_s_warn(diagnostic.summary)}")
-
-
-# ── models ────────────────────────────────────────────────────────────────────
 
 
 def inspect_models(errors: list, warnings: list):
@@ -320,7 +301,7 @@ def inspect_models(errors: list, warnings: list):
         console.print("\n  [dim]no model files found[/dim]")
         return
 
-    # Directories to scan for symlinks pointing into shared/models/
+    # Scan harness directories for model links
     scan_dirs = [HARNESSES_DIR / h for h in HARNESS_FILES]
 
     for model_file in model_files:
@@ -361,13 +342,9 @@ def inspect_models(errors: list, warnings: list):
                         harness, _s_err(f"expected symlink missing in harnesses/{harness}/")
                     )
                     errors.append(f"shared model '{model_file.name}': {harness} symlink missing")
-            # harnesses that are neither expected nor excluded are silently skipped
 
         if not wired and expected_harnesses:
             warnings.append(f"shared model '{model_file.name}': no harness symlinks found")
-
-
-# ── harness wiring (symlinks + generated files) ───────────────────────────────
 
 
 def inspect_harness_wiring(errors: list, warnings: list):
@@ -394,9 +371,6 @@ def inspect_harness_wiring(errors: list, warnings: list):
                 warnings.append(f"generated file {short(dst)}: {result.summary}")
             else:
                 console.print(f"    {_s_ok(short(dst), '(generated)')}")
-
-
-# ── generated-file drift ──────────────────────────────────────────────────────
 
 
 # Reuse the substitution definition shared with bootstrap through the registry
@@ -435,7 +409,6 @@ def inspect_generated_drift(warnings: list):
     for harness in sorted(GENERATED_MAP):
         for src, dst in GENERATED_MAP[harness]:
             if not src.exists() or not dst.exists() or dst.is_symlink():
-                # Missing or unrendered cases are reported in harness wiring above
                 continue
             result = inspect_generated(src, dst, render_template)
             if result.status is not Status.WARNING:
@@ -451,27 +424,26 @@ def inspect_generated_drift(warnings: list):
             console.print("    [dim]Resolve manually:[/dim]")
             console.print(
                 "    [dim]  • discard live changes, restore from template:[/dim]"
-                "  enchiridion bootstrap"
+                "  python -m enchiridion bootstrap"
             )
             console.print(
                 f"    [dim]  • promote live values into template:[/dim]"
                 f"  edit {short(src)} (keep [italic]__HOME__[/italic] / "
-                f"[italic]__REPO__[/italic] placeholders), then enchiridion bootstrap"
+                f"[italic]__REPO__[/italic] placeholders), then "
+                "python -m enchiridion bootstrap"
             )
             warnings.append(
                 f"generated file drift: {short(dst)} differs from rendered "
-                f"{short(src)} — manual reconciliation required"
+                f"{short(src)}. Manual reconciliation required"
             )
 
     if not any_drift:
         console.print("\n  [green]✓  no drift between live files and rendered templates[/green]")
 
 
-# ── main ──────────────────────────────────────────────────────────────────────
-
-
-def main():
-    """Run every inspection and print the summary; exit non-zero on hard failures."""
+def main() -> None:
+    """Run all inspections and exit nonzero on hard failures."""
+    argparse.ArgumentParser(description=__doc__).parse_args()
     errors: list[str] = []
     warnings: list[str] = []
 

@@ -1,27 +1,7 @@
-# Harness registry: the single source of truth for harness topology
-# Read by enchiridion.registry for sync, doctor, verify, and bootstrap
-#
-# Top-level keys:
-#   skills                 shared skill names wired into every harness skill_dir
-#   doctrine_token_ceiling hard token ceiling enforced by enchiridion verify
-#   stale_months           rules and skills with no recent commit warn during checks
-#
-# Per-harness keys:
-#   root              directory whose presence means the harness is installed
-#   instruction_file  repo-relative path to the composed instruction file
-#   instruction_live  live path the harness reads instructions from
-#   skill_dir         harness skill directory (shared skills are linked here)
-#   symlinks          [repo-relative source, live destination] pairs
-#   generated         like symlinks, but the live file is rendered from the
-#                     source with placeholder substitution (__REPO__, __HOME__)
-#   [harnesses.<h>.agents]  frontmatter rendering rules for shared/agents/
-#
-# Adding a harness: add an entry here, add block fences to its instruction
-# file, then run enchiridion bootstrap and enchiridion sync --apply
-# Dropping a harness: python -m enchiridion harness remove <name>, then delete
-# its entry here
+# Declare harness topology for sync, verify, doctor, and bootstrap
+# Use repository-relative or home-relative paths so the registry stays portable
 
-# Shared skills wired into every harness that declares a skill_dir
+# Wire these skills into every harness that declares a skill directory
 skills = [
     "wiki-ops",
     "rules",
@@ -34,11 +14,10 @@ skills = [
     "repo-seed",
 ]
 
-# Hard ceiling for total always-on doctrine (shared/blocks/*.md), in
-# approximate tokens, enforced by enchiridion verify
+# Enforce an approximate token ceiling for all always-on doctrine
 doctrine_token_ceiling = 2500
 
-# Rules and skills with no commit in this many months warn during checks
+# Warn when rules or skills exceed this age without a commit
 stale_months = 12
 
 [harnesses.pi]
@@ -56,7 +35,8 @@ generated = [
 
 [harnesses.pi.agents]
 filename_suffix = ".md"
-# pi frontmatter: description only (name/model/tools are not used)
+
+# Render only the frontmatter fields supported by pi
 include_fields = ["description"]
 
 [harnesses.claude-code]
@@ -76,8 +56,8 @@ generated = [
 
 [harnesses.claude-code.agents]
 filename_suffix = ".md"
-# claude-code subagents: name + description (+ optional tools as comma-separated string)
-# model field is intentionally omitted so subagents inherit the session model
+
+# Omit model so Claude subagents inherit the session model
 include_fields = ["name", "description", "tools"]
 tools = "Read, Edit, Bash, Glob, Grep, Write"
 
@@ -95,7 +75,8 @@ generated = []
 
 [harnesses.copilot.agents]
 filename_suffix = ".agent.md"
-# copilot frontmatter: all fields
+
+# Render every frontmatter field required by Copilot
 include_fields = ["name", "description", "model", "tools"]
 model = "claude-sonnet-4-6"
 tools = ["read", "search", "edit", "execute"]

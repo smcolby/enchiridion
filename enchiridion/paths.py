@@ -63,7 +63,7 @@ def discover_repo(explicit: Path | None = None, start: Path | None = None) -> Pa
         if _is_checkout(candidate):
             return candidate
 
-    # Editable installs retain a reliable path back to their source checkout
+    # Recover the source checkout from an editable installation
     package_checkout = Path(__file__).resolve().parents[1]
     if _is_checkout(package_checkout):
         return package_checkout
