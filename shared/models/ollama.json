@@ -26,6 +26,23 @@
                     }
                 },
                 {
+                    "id": "gemma4:31b-iq4xs",
+                    "contextWindow": 131072,
+                    "reasoning": true,
+                    "compat": {
+                        "thinkingFormat": "openai",
+                        "supportsReasoningEffort": true
+                    },
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": null,
+                        "low": null,
+                        "medium": null,
+                        "high": "high",
+                        "xhigh": null
+                    }
+                },
+                {
                     "id": "muse-glimmer-30b-q4",
                     "contextWindow": 262144,
                     "reasoning": true,
