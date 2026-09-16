@@ -64,14 +64,12 @@
                     "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
-                        "thinkingFormat": "chat-template",
-                        "chatTemplateKwargs": {
-                            "reasoning_strength": { "$var": "thinking.effort" }
-                        }
+                        "thinkingFormat": "openai",
+                        "supportsReasoningEffort": true
                     },
                     "thinkingLevelMap": {
-                        "off": null,
-                        "minimal": null,
+                        "off": "none",
+                        "minimal": "minimal",
                         "low": "low",
                         "medium": "medium",
                         "high": "high",
