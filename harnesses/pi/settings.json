@@ -1,6 +1,6 @@
 {
-  "defaultProvider": "ollama",
-  "defaultModel": "qwen3.8:27b-iq4xs",
+  "defaultProvider": "llama",
+  "defaultModel": "qwen3.8-27b-iq4xs",
   "defaultThinkingLevel": "xhigh",
   "compaction": {
     "enabled": true,

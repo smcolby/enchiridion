@@ -2,7 +2,6 @@
 """Install or repair live wiring declared by the harness registry."""
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -113,13 +112,8 @@ def main() -> None:
     print()
 
     print("=== Manual steps required ===")
-    print("  1. Update the Ollama baseUrl in shared/models/ollama.json")
+    print("  1. Update the llama-server baseUrl in shared/models/llama.json")
     print("  2. Create ~/.pi/agent/auth.json with API keys (never committed)")
-    if not os.environ.get("OLLAMA_HOST"):
-        print(
-            "  3. Add 'export OLLAMA_HOST=http://loki.local:11434' to your shell profile"
-            " so 'ollama launch claude' routes to loki.local"
-        )
     print()
     print("Run 'python -m enchiridion verify' to confirm congruence.")
 

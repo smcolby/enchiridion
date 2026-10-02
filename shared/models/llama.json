@@ -1,15 +1,16 @@
 {
     "providers": {
-        "ollama": {
-            "baseUrl": "http://loki.local:11434/v1",
+        "llama": {
+            "baseUrl": "http://loki.local:8090/v1",
             "api": "openai-completions",
-            "apiKey": "ollama",
+            "apiKey": "llama",
             "compat": {
                 "supportsDeveloperRole": false
             },
             "models": [
                 {
-                    "id": "qwen3.8:27b-iq4xs",
+                    "id": "qwen3.8-27b-iq4xs",
+                    "input": ["text", "image"],
                     "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
@@ -26,7 +27,7 @@
                     }
                 },
                 {
-                    "id": "swift-qwen3.8:27b-iq4xs",
+                    "id": "swift-qwen3.8-27b-iq4xs",
                     "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
@@ -43,8 +44,8 @@
                     }
                 },
                 {
-                    "id": "gemma4:31b-iq4xs",
-                    "contextWindow": 131072,
+                    "id": "gemma4-31b-iq4xs",
+                    "contextWindow": 163840,
                     "reasoning": true,
                     "compat": {
                         "thinkingFormat": "openai",
@@ -68,7 +69,7 @@
                         "supportsReasoningEffort": true
                     },
                     "thinkingLevelMap": {
-                        "off": "none",
+                        "off": null,
                         "minimal": "minimal",
                         "low": "low",
                         "medium": "medium",
