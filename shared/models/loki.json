@@ -93,6 +93,23 @@
                         "high": null,
                         "xhigh": "xhigh"
                     }
+                },
+                {
+                    "id": "swift-qwen3.8-flash-next-iq2_xs",
+                    "contextWindow": 131072,
+                    "reasoning": true,
+                    "compat": {
+                        "thinkingFormat": "openai",
+                        "supportsReasoningEffort": true
+                    },
+                    "thinkingLevelMap": {
+                        "off": "none",
+                        "minimal": null,
+                        "low": "low",
+                        "medium": "medium",
+                        "high": null,
+                        "xhigh": "xhigh"
+                    }
                 }
             ]
         }
