@@ -3,7 +3,7 @@ harnesses = ["pi"]
 
 # Explain harnesses that use this provider through another mechanism
 [notes]
-"claude-code" = "point ANTHROPIC_BASE_URL at http://loki.local:8090 to use llama-server's Anthropic-compatible /v1/messages; not wired via models.json"
+"claude-code" = "point ANTHROPIC_BASE_URL at http://loki.local:8090 to use the loki gateway's Anthropic-compatible /v1/messages (llama-server and Strata models); not wired via models.json"
 
 # Explain harnesses that cannot use local model routing
 [not_applicable]

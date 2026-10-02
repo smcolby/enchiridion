@@ -112,7 +112,7 @@ def main() -> None:
     print()
 
     print("=== Manual steps required ===")
-    print("  1. Update the llama-server baseUrl in shared/models/llama.json")
+    print("  1. Update the loki gateway baseUrl in shared/models/loki.json")
     print("  2. Create ~/.pi/agent/auth.json with API keys (never committed)")
     print()
     print("Run 'python -m enchiridion verify' to confirm congruence.")

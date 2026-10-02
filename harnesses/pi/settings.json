@@ -1,5 +1,5 @@
 {
-  "defaultProvider": "llama",
+  "defaultProvider": "loki",
   "defaultModel": "qwen3.8-27b-iq4xs",
   "defaultThinkingLevel": "xhigh",
   "compaction": {
