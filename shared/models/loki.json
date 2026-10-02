@@ -96,7 +96,7 @@
                 },
                 {
                     "id": "swift-qwen3.8-flash-next-iq2_xs",
-                    "contextWindow": 131072,
+                    "contextWindow": 262144,
                     "reasoning": true,
                     "compat": {
                         "thinkingFormat": "openai",
