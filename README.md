@@ -107,6 +107,8 @@ python -m enchiridion sync --agents --apply  # renders per-harness frontmatter
 ```
 Personas carry stance only. Procedure belongs in a playbook, and conventions belong in a rule.
 
+**Update the Open WebUI system prompt:** edit `harnesses/open-webui/system-prompt.md`, then paste it into Open WebUI under **Settings → General → System Prompt**. Open WebUI stores the prompt in its own database, so nothing deploys it automatically; this file is the reference copy.
+
 **Seed a repository:** invoke the `repo-seed` skill from any harness session in the target repo. It detects language, stack, environment workflow, and existing instruction files, asks at most four unresolved questions, and deploys provenance-stamped rules plus an `AGENTS.md`.
 
 **Reconcile drift** (`verify` reports that a harness file differs from shared): decide first, then act. Promote the change into `shared/` if it should be universal, or move it outside the block fence if harness-specific. `python -m enchiridion sync --apply` overwrites fenced content with shared, so promote intentional changes first.
